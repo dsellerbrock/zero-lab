@@ -55,8 +55,8 @@ def check(host, qemu, images, active, busy, free_bytes, catalog):
     if img and img.get("provisioned"):
         row("image", "Raspberry Pi OS", "ok", f"{img['label']}.", True)
     elif busy:
-        row("image", "Raspberry Pi OS", "waiting", "Downloading and checking the image now.", True,
-            short="Downloading")
+        row("image", "Raspberry Pi OS", "waiting", "Being set up now: download, unpack, then the first boot.", True,
+            short="Setting up")
     else:
         row("image", "Raspberry Pi OS", "missing",
             "No disk image yet. Zero Lab downloads the official one and checks it, or uses a file you have.", True,
