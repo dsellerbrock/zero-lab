@@ -57,7 +57,7 @@ build() {
   local q v
   q=$(ls "$SRC"/qemu-zero-lab-*.tar.xz 2>/dev/null | head -n1); v=$(ls "$SRC"/virglrenderer-*.tar.xz 2>/dev/null | head -n1)
   [ -n "$q" ] && [ -n "$v" ] || die "sources/ is missing the QEMU or virglrenderer tarball"
-  local stamp; stamp="$(basename "$q")+$(basename "$v")+$(cat "$SRC"/patches/qemu/*.patch 2>/dev/null | cksum | cut -d" " -f1)"
+  local stamp; stamp="$(basename "$q")+$(basename "$v")"
   if [ -x "$DEST/qemu/bin/qemu-system-aarch64" ] && [ "$(cat "$DEST/qemu/.built-from" 2>/dev/null)" = "$stamp" ]; then
     say "QEMU already built from these sources"; return
   fi
@@ -65,7 +65,6 @@ build() {
   say "Unpacking sources"
   tar -xJf "$q" -C "$WORK/qemu" --strip-components 1
   tar -xJf "$v" -C "$WORK/virgl" --strip-components 1
-  for p in "$SRC"/patches/qemu/*.patch; do [ -f "$p" ] && logged patch -p1 -d "$WORK/qemu" -i "$p"; done
   say "Building virglrenderer with Venus ($JOBS jobs)"
   # The pinned virglrenderer has one GCC-only pedantic error (declaration after a case label).
   logged meson setup "$WORK/virgl-build" "$WORK/virgl" --prefix="$DEST/qemu" --libdir=lib \
