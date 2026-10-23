@@ -183,6 +183,15 @@ class VmTest(unittest.TestCase):
         self.assertIn("hostfwd=tcp:127.0.0.1:2222-:22", s)
         self.assertIn("-vnc 127.0.0.1:99,websocket=127.0.0.1:5701", s)
         self.assertNotIn("restrict=on", s)
+        # launcher parity (raspi-zero2w 5fbae66, 053bc65)
+        for want in ("systemd.mask=NetworkManager-wait-online.service", "systemd.mask=systemd-networkd-wait-online.service",
+                     "systemd.mask=wayvnc.service", "dwc_otg.fiq_enable=0", "dwc_otg.fiq_fsm_enable=0",
+                     "bus=virtio-mmio-bus.0", "virtio-blk-device,bus=virtio-mmio-bus.1", "cache=writeback",
+                     "snapshot=off", "root=PARTUUID="):
+            self.assertIn(want, s)
+        self.assertNotIn("rpi-resize-swap-file", s)  # virtio root keeps Pi OS swap (zram)
+        soft = " ".join(vm.build_argv("qemu", {**c, "gpu": "soft"}, d, d, {"ssh": 1, "ws": 2, "vnc": 5901}))
+        self.assertIn("virtio-gpu-device,bus=virtio-mmio-bus.0", soft)
         p = " ".join(vm.build_argv("qemu", {**c, "network": False}, d, d, {"ssh": 1, "ws": 2, "vnc": 5901}, "provision"))
         self.assertIn("if=sd", p)
         self.assertIn("restrict=on", p)

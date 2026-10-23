@@ -97,7 +97,9 @@ def build_argv(qemu, cfg, img, run, ports, mode="desktop"):
               "dwc_otg.fiq_fsm_enable=0", "dwc_otg.fiq_enable=0"]
     # wayvnc restart-loops without a GPU session, and the network wait times out under QEMU user-net.
     append += ["systemd.mask=wayvnc.service", "systemd.mask=wayvnc-control.service",
-               "systemd.mask=vncserver-virtuald.service", "systemd.mask=systemd-networkd-wait-online.service"]
+               "systemd.mask=vncserver-virtuald.service", "systemd.mask=systemd-networkd-wait-online.service",
+               # raspi-zero2w 053bc65: a slow DHCP lease otherwise holds the desktop back to 84-107 s
+               "systemd.mask=NetworkManager-wait-online.service"]
     if mode == "desktop":
         append += ["systemd.show_status=false", "systemd.unit=kernel-command-line.target",
                    "systemd.run=\"/bin/sh -c 'tr -d \\\\000 < /proc/device-tree/chosen/zl-setup"
