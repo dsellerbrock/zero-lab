@@ -93,11 +93,11 @@ def build_argv(qemu, cfg, img, run, ports, mode="desktop"):
               "console=tty1", "console=ttyAMA1,115200",
               # QEMU's DWC2 enumerates reliably with the FIQ off
               "dwc_otg.fiq_fsm_enable=0", "dwc_otg.fiq_enable=0"]
+    # wayvnc restart-loops without a GPU session, and the network wait times out under QEMU user-net.
+    append += ["systemd.mask=wayvnc.service", "systemd.mask=wayvnc-control.service",
+               "systemd.mask=vncserver-virtuald.service", "systemd.mask=systemd-networkd-wait-online.service"]
     if mode == "desktop":
         append += ["systemd.show_status=false", "systemd.unit=kernel-command-line.target",
-                   "systemd.mask=wayvnc.service", "systemd.mask=wayvnc-control.service",
-                   "systemd.mask=vncserver-virtuald.service",
-                   "systemd.mask=systemd-networkd-wait-online.service",
                    "systemd.run=\"/bin/sh -c 'tr -d \\\\000 < /proc/device-tree/chosen/zl-setup"
                    " | base64 -d | gzip -dc | /bin/sh'\"",
                    "systemd.run_success_action=none", "systemd.run_failure_action=none"]
