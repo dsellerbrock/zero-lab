@@ -124,6 +124,8 @@
     </div>
   </section>
 
+  <div id="splitter" class="splitter" role="separator" aria-orientation="vertical" aria-label="Resize the GPIO panel"
+       tabindex="0" title="Drag to resize the GPIO panel"></div>
   <section class="breadboard" aria-labelledby="bb-title">
     <div class="bb-head">
       <h2 id="bb-title">GPIO</h2>
@@ -206,6 +208,13 @@
     <footer class="drawer-foot">
       <p class="where"><span id="saved-state">Changes save automatically</span> to <code id="config-path"></code> <button class="link" data-reveal="config" type="button">Show</button></p>
     </footer>
+  </form>
+</dialog>
+<dialog id="part-dlg" class="confirm part-dlg" aria-labelledby="part-title">
+  <form method="dialog">
+    <h2 id="part-title"></h2>
+    <div class="cfg"></div>
+    <div class="row"><button class="btn" value="close">Done</button></div>
   </form>
 </dialog>
 <dialog id="confirm-dlg" class="confirm" aria-labelledby="confirm-text">

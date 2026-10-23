@@ -85,7 +85,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--board); width: 16p
 .brand, .status, .ready-btn, .summary, .topbar .btn { flex: none; }
 
 /* ---------- bench layout ---------- */
-.bench { display: grid; grid-template-columns: auto minmax(0, 1fr) 400px; gap: var(--s4); padding: var(--s4); min-height: 0;
+.bench { display: grid; grid-template-columns: auto minmax(0, 1fr) 8px var(--bb-w, 440px); gap: var(--s4) var(--s2); padding: var(--s4); min-height: 0;
          overflow: hidden; }
 .monitor { display: grid; grid-template-rows: minmax(200px, 1fr) auto; gap: var(--s3); min-height: 0; }
 .monitor.first-run { grid-template-rows: 1fr; }
@@ -170,7 +170,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--board); width: 16p
 .legend .sw.pwr { border-color: #f28f8f; } .legend .sw.gnd { background: #0b2018; border-color: #0b2018; } .legend .sw.one { border-radius: 2px; }
 .parts { display: flex; flex-wrap: wrap; gap: var(--s2); }
 .parts button { min-height: 28px; padding: 2px var(--s3); }
-.canvas { position: relative; min-height: 180px; border-radius: var(--r-s); overflow: hidden; background-color: var(--plastic);
+.canvas { position: relative; min-height: 180px; border-radius: var(--r-s); overflow: auto; background-color: var(--plastic);
   background-image: radial-gradient(circle, var(--hole) 1.6px, transparent 2px); background-size: 14px 14px;
   border: 1px solid var(--line);
   box-shadow: inset 0 3px 0 -1px rgb(196 45 37 / .45), inset 0 -3px 0 -1px rgb(46 111 208 / .45); }
@@ -184,8 +184,6 @@ input[type=checkbox], input[type=radio] { accent-color: var(--board); width: 16p
 .w .t span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .w .t button { font: inherit; padding: 0 var(--s1); border: 0; background: none; color: var(--ink-2); cursor: pointer; }
 .w .b { padding: var(--s2); display: flex; justify-content: center; align-items: center; }
-.w .cfg { padding: var(--s2); border-top: 1px solid var(--line); font-size: 12px; display: grid; gap: var(--s1); width: 200px; }
-.w .cfg input:not([type=checkbox]) { width: 100%; }
 .pushbtn { width: 48px; height: 48px; border-radius: 50%; background: #3a3f3c; border: 6px solid #c9ccc8; cursor: pointer; }
 .pushbtn.down { background: #1d201e; border-width: 7px; }
 .toggle { width: 52px; height: 26px; border-radius: 13px; background: var(--hole); position: relative; border: 0; cursor: pointer; }
@@ -333,3 +331,13 @@ canvas.probe { background: var(--console); border-radius: var(--r-s); }
 .confirm .row { justify-content: flex-end; margin-top: var(--s3); }
 @media (max-width: 1100px) { .files { flex-direction: column; } .rail { flex-direction: row; width: auto; padding: var(--s2) var(--s3); }
   .rail-label { writing-mode: horizontal-tb; transform: none; } .fs-panel { width: auto; } }
+
+/* resizable GPIO panel */
+.splitter { cursor: col-resize; border-radius: 4px; align-self: stretch; position: relative; }
+.splitter::after { content: ""; position: absolute; inset: 40% 3px; border-radius: 2px; background: var(--line); }
+.splitter:hover::after, .splitter:focus-visible::after, .splitter.dragging::after { background: var(--pad); inset: 0 3px; }
+.part-dlg { width: min(360px, 92vw); }
+.part-dlg h2 { font-size: 16px; margin-bottom: var(--s3); }
+.part-dlg .cfg { display: grid; gap: var(--s3); }
+.part-dlg .cfg input:not([type=checkbox]), .part-dlg .cfg select { width: 100%; }
+@media (max-width: 1100px) { .splitter { display: none; } }

@@ -81,10 +81,10 @@ export function breadboard({ canvas, drive, lev, esc }) {
     const [gear, close] = el.querySelectorAll(".t button");
     close.onclick = () => { el.remove(); widgets = widgets.filter((x) => x !== w); };
     gear.onclick = () => {
-      const open = el.querySelector(".cfg");
-      gear.setAttribute("aria-expanded", String(!open));
-      if (open) return open.remove();
-      const cfg = document.createElement("div"); cfg.className = "cfg";
+      // Settings open in a dialog, so the board's edges can never clip them.
+      const dlg = document.getElementById("part-dlg");
+      const cfg = dlg.querySelector(".cfg");
+      dlg.querySelector("h2").textContent = `${w.label} settings`;
       cfg.innerHTML = `<label class="field">Name <input data-k="label" value="${esc(w.label)}"></label>
         <label class="field">GPIO pins${w.type === "seg7" ? " for a,b,c,d,e,f,g" : w.type === "knob" ? ", lowest bit first" : ""} <input data-k="pins" value="${w.pins.join(",")}" inputmode="numeric"></label>` +
         (w.type === "button" ? `<label class="check"><input type="checkbox" data-k="idle" ${w.idle ? "checked" : ""}> Reads 1 until pressed (pull-up)</label>` : "") +
@@ -110,7 +110,8 @@ export function breadboard({ canvas, drive, lev, esc }) {
         if (w.redraw) { w.redraw(); w.applyIdle?.(); }
         relabel(); w.update && w.update();
       };
-      el.append(cfg);
+      dlg.onclose = () => { cfg.innerHTML = ""; cfg.oninput = null; gear.focus(); };
+      dlg.showModal();
       cfg.querySelector("input").focus();
     };
 

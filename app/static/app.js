@@ -57,8 +57,8 @@ function updateControls() {
   $("run").disabled = $("pstop").disabled = $("autostart").disabled = status !== "running";
   $("code-hint").textContent = status === "running" ? "" : status === "stopped" ? "Boot the Pi to build and run code." : "Code can run once the desktop is up.";
   const st = $("status");
-  st.dataset.state = busy && !running ? "setup" : status;  // an attribute, so it can't pick up other classes' styles
-  $("status-text").textContent = busy && !running ? "Setting up" : { stopped: "Stopped", booting: "Booting", running: "Running", stopping: "Stopping" }[status];
+  st.dataset.state = busy ? "setup" : status;  // an attribute, so it can't pick up other classes' styles
+  $("status-text").textContent = busy ? "Setting up" : { stopped: "Stopped", booting: "Booting", running: "Running", stopping: "Stopping" }[status];
 }
 
 // ---------- screen: setup flow or the Pi's display ----------
@@ -335,6 +335,26 @@ bb.load({ version: 1, widgets: [ // matches samples/button-led-*
   { type: "button", x: 20, y: 24, label: "Button", pins: [17], idle: 1 },
   { type: "led", x: 196, y: 24, label: "LED", pins: [27], color: "#ff3b30" },
 ] });
+
+// ---------- resizable GPIO panel (drag the divider; arrow keys too); remembered per browser ----------
+{
+  const sp = $("splitter"), bench = document.querySelector(".bench"), KEY = "zerolab.bbWidth";
+  const setW = (px) => {
+    const w = Math.round(Math.max(320, Math.min(px, innerWidth * 0.7)));
+    bench.style.setProperty("--bb-w", w + "px"); sp.setAttribute("aria-valuenow", w);
+    try { localStorage.setItem(KEY, w); } catch { /* not remembered */ }
+  };
+  try { const saved = +localStorage.getItem(KEY); if (saved) setW(saved); } catch { /* ignore */ }
+  sp.onpointerdown = (e) => {
+    sp.setPointerCapture(e.pointerId); sp.classList.add("dragging");
+    sp.onpointermove = (m) => setW(bench.getBoundingClientRect().right - 16 - m.clientX);
+  };
+  sp.onpointerup = () => { sp.onpointermove = null; sp.classList.remove("dragging"); };
+  sp.onkeydown = (e) => {
+    const cur = document.querySelector(".breadboard").getBoundingClientRect().width;
+    if (e.key === "ArrowLeft") setW(cur + 24); if (e.key === "ArrowRight") setW(cur - 24);
+  };
+}
 
 // ---------- Files sidebar ----------
 const files = filesPanel({ $, api, toast, esc, tilde: (p) => tilde(p), token: T });
