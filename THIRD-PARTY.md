@@ -14,6 +14,7 @@ Zero Lab's own code is GPL-2.0-or-later (see LICENSE). The binaries it ships con
 | libslirp | 4.9.5 | BSD-3-Clause | macOS | https://gitlab.freedesktop.org/slirp/libslirp |
 | MoltenVK | prebuilt | Apache-2.0 | macOS | https://github.com/KhronosGroup/MoltenVK |
 | CPython (python-build-standalone) | 3.12.12 | PSF-2.0 (+ bundled lib licences) | macOS | https://github.com/astral-sh/python-build-standalone |
+| B612 and B612 Mono fonts (latin subset, woff2) | Google Fonts build of 1.008 | SIL OFL 1.1 | all | `app/static/fonts/` (licence: `app/static/fonts/OFL.txt`), https://github.com/polarsys/b612 |
 | noVNC | 1.7.0 | MPL-2.0 (core), MIT (pako) | all | shipped as source in `app/static/novnc/` (licence: `app/static/novnc/LICENSE.txt`) |
 
 On Linux and Windows (WSL), QEMU and virglrenderer are built from the bundled sources on your machine, and the other libraries come from your distribution.

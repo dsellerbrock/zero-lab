@@ -1,11 +1,11 @@
 import RFB from "./novnc/core/rfb.js";
+import { breadboard } from "./widgets.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const T = window.ZL_TOKEN;
-let state = null, status = "stopped", wsPort = null, rfb = null;
-let pins = { fn: Array(28).fill(0), lev: Array(28).fill(0) };
-let widgets = [];
+let state = null, status = "stopped", wsPort = null, rfb = null, setupOpen = false, screenUp = false;
+let pins = { fn: Array(28).fill(0), lev: Array(28).fill(0), seen: false };
 
 // ---------- API ----------
 async function api(path, body) {
@@ -18,72 +18,144 @@ async function api(path, body) {
 }
 function toast(msg) {
   const t = $("toast"); t.textContent = msg; t.classList.add("show");
-  clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove("show"), 3500);
+  clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove("show"), 4000);
 }
 const act = (fn) => async (...a) => { try { await fn(...a); } catch (e) { toast(e.message); } };
-
-// ---------- state + settings ----------
 function fill(sel, values, current, labels = values) {
   sel.innerHTML = values.map((v, i) => `<option value="${esc(v)}">${esc(labels[i])}</option>`).join("");
   if (values.includes(current)) sel.value = current;
 }
-function render() {
-  const h = state.host, c = state.cfg;
-  $("hostinfo").textContent = `${h.system} ${h.arch}` + (h.accels[0] !== "tcg" ? " · accelerated" : " · emulated CPU (no acceleration on this machine)");
-  fill($("accel"), h.accels, c.accel, h.accels.map((a) => ({ hvf: "Apple HVF (fast)", tcg: "TCG (emulated)" }[a] || a)));
-  fill($("gpu"), h.gpus, c.gpu, h.gpus.map((g) => ({ venus: "Venus (Vulkan, host GPU)", virgl: "virgl (OpenGL, host GPU)", soft: "Software" }[g])));
-  fill($("display"), h.displays, c.display, h.displays.map((d) => ({ app: "In this window", window: "Separate window" }[d])));
-  for (const k of ["ram", "cpus"]) $(k).value = String(c[k]);
-  $("network").checked = c.network; $("snapshot").checked = c.snapshot;
-  const imgs = state.images;
-  fill($("image"), imgs.map((i) => i.name), c.image || imgs.find((i) => i.provisioned)?.name,
-       imgs.map((i) => i.name + (i.provisioned ? "" : " (not set up)")));
-  if (!imgs.length) $("addimg").open = true;
-  fill($("src-kind"), [...state.catalog.map((e) => e.id), "local"], $("src-kind").value || "desktop",
-       [...state.catalog.map((e) => `${e.name} — ${(e.size / 1e9).toFixed(1)} GB`), "A file on this computer…"]);
-  fill($("layout-list"), state.layouts, $("layout-list").value);
-  showStaged(state.staged);
-  if (state.busy) $("progress").textContent = state.busy + "…";
-  setStatus(state.status);
+const ACCEL = { hvf: "Apple Hypervisor (fast)", tcg: "Emulated CPU (works everywhere)" };
+const ACCEL_SHORT = { hvf: "HVF", tcg: "Emulated CPU" };
+const GPU = { venus: "Venus: Vulkan on your GPU", virgl: "virgl: OpenGL on your GPU", soft: "Software" };
+const GPU_SHORT = { venus: "Venus", virgl: "virgl", soft: "Software graphics" };
+const provisioned = () => state.images.filter((i) => i.provisioned);
+const shortLabel = (l) => l.replace(/ \(64-bit.*$/, "");
+const activeImage = () => provisioned().find((i) => i.name === state.cfg.image) || provisioned()[0];
+
+// ---------- top bar ----------
+function renderSummary() {
+  const c = state.cfg, img = activeImage();
+  const parts = [img ? img.label.replace(/ \(64-bit.*$/, "") : "No disk image", `${c.ram} MB`,
+    `${c.cpus} CPU${c.cpus > 1 ? "s" : ""}`, ACCEL_SHORT[c.accel], GPU_SHORT[c.gpu], "Settings"];
+  $("summary").innerHTML = parts.map((p, i) => `<span class="${i === 0 ? "disk" : i === parts.length - 1 ? "gear" : ""}">${esc(p)}</span>`).join("");
+  $("summary").setAttribute("aria-label", `Settings: ${parts.slice(0, -1).join(", ")}`);
 }
-async function refresh() { state = await api("/api/state"); render(); }
+function updateControls() {
+  const running = status !== "stopped", ready = !!activeImage(), busy = state.busy;
+  const reason = busy ? "Setting up the disk image" : !ready ? "Set up a disk image to boot" : "";
+  $("boot-reason").textContent = running ? "" : reason;
+  $("boot").disabled = running || !!busy || !ready;
+  $("boot").setAttribute("aria-describedby", "boot-reason");
+  $("stop").disabled = !running;
+  $("settings-fields").disabled = running || !!busy;
+  $("lock-note").hidden = !running;
+  $("run").disabled = $("pstop").disabled = $("autostart").disabled = status !== "running";
+  $("code-hint").textContent = status === "running" ? "" : status === "stopped" ? "Boot the Pi to build and run code." : "Code can run once the desktop is up.";
+  const st = $("status");
+  st.className = "status " + (busy && !running ? "setup" : status);
+  $("status-text").textContent = busy && !running ? "Setting up" : { stopped: "Stopped", booting: "Booting", running: "Running", stopping: "Stopping" }[status];
+}
+
+// ---------- screen: setup flow or the Pi's display ----------
+function renderScreen() {
+  const needSetup = status === "stopped" && (setupOpen || !activeImage() || state.busy);
+  $("setup").hidden = !needSetup;
+  document.querySelector(".monitor").classList.toggle("first-run", needSetup);
+  $("screen-msg").hidden = needSetup || screenUp;
+  if (needSetup) return;
+  const img = activeImage();
+  $("screen-msg").textContent =
+    status === "stopped" ? `Press Boot to start ${shortLabel(img.label)}.`
+    : state.cfg.display === "window" ? "The Pi's screen is in its own window."
+    : status === "booting" ? "Starting the Pi. The screen appears when the display comes up." : "";
+}
+function renderSetup() {
+  const fs = $("os-choices"), cur = fs.querySelector("input:checked")?.value || "desktop";
+  fs.innerHTML = '<legend class="sr">Operating system</legend>' + state.catalog.map((e) => `
+    <label class="choice"><input type="radio" name="os" value="${esc(e.id)}"><span>${esc(e.name.replace(/ \(64-bit.*$/, ""))}</span>
+      <span class="size">${(e.size / 1e9).toFixed(1)} GB</span>
+      <small>${e.id === "desktop" ? "Recommended. The normal Pi desktop." : e.id === "full" ? "Desktop plus extra apps for learning and office work." : "No desktop: terminal only, smallest download."}</small></label>`).join("") + `
+    <label class="choice"><input type="radio" name="os" value="local"><span>A disk image already on this computer</span><span></span>
+      <small>An official .img or .img.xz you downloaded before. Zero Lab works on a copy.</small></label>`;
+  (fs.querySelector(`input[value="${cur}"]`) || fs.querySelector("input")).checked = true;
+  fs.onchange = () => { $("local-row").hidden = fs.querySelector("input:checked").value !== "local"; };
+  fs.onchange();
+  $("go-note").textContent = state.host.accels[0] === "hvf"
+    ? "Takes about 5 to 10 minutes on this Mac, mostly the download. The first boot then creates your user."
+    : "This computer emulates the Pi's CPU, so the first boot takes 20 to 40 minutes after the download.";
+  $("setup-cancel").hidden = !activeImage();
+  $("setup-title").textContent = activeImage() ? "Set up another disk image" : "Set up your Pi";
+}
+const STAGES = ["download", "decompress", "prepare", "first-boot"];
+function showProgress(m) {
+  const list = $("progress"); list.hidden = false;
+  const idx = STAGES.indexOf(m.stage);
+  list.querySelectorAll("li").forEach((li, i) => {
+    li.className = i < idx || m.stage === "done" ? "done" : i === idx ? "active" : "";
+    li.querySelector(".bar")?.remove();
+    if (i === idx && m.total > 1) li.insertAdjacentHTML("beforeend",
+      `<span class="pct">${Math.round((100 * m.done) / m.total)}%</span><span class="bar"><i style="width:${(100 * m.done) / m.total}%"></i></span>`);
+    else li.querySelector(".pct")?.remove();
+  });
+  ["step-os", "step-user"].forEach((id) => $(id).classList.add("done"));
+  $("img-add").disabled = true;
+}
+$("setup").onsubmit = act(async (e) => {
+  e.preventDefault();
+  const kind = $("os-choices").querySelector("input:checked").value;
+  if (!$("img-pass").value) { $("img-pass").focus(); throw new Error("Choose a password for the Pi's user"); }
+  let name = kind, n = 2;
+  while (state.images.some((i) => i.name === name)) name = `${kind}-${n++}`;
+  $("setup-error").hidden = true;
+  await api("/api/image/add", { name, user: $("img-user").value.trim(), password: $("img-pass").value,
+    source: kind === "local" ? $("src-path").value.trim() : kind });
+  $("img-pass").value = "";
+  state.busy = `setting up ${name}`; updateControls();
+  showProgress({ stage: kind === "local" ? "decompress" : "download", done: 0, total: 1 });
+});
+$("setup-cancel").onclick = () => { setupOpen = false; renderScreen(); };
+
+// ---------- settings drawer ----------
+const dlg = $("settings");
+$("summary").onclick = () => dlg.showModal();
+function renderSettings() {
+  const h = state.host, c = state.cfg;
+  fill($("image"), provisioned().map((i) => i.name), activeImage()?.name, provisioned().map((i, _, all) => shortLabel(i.label) + (all.filter((j) => j.label === i.label).length > 1 ? ` (${i.name})` : "")));
+  if (!provisioned().length) $("image").innerHTML = "<option>None yet</option>";
+  fill($("accel"), h.accels, c.accel, h.accels.map((a) => ACCEL[a]));
+  fill($("gpu"), h.gpus, c.gpu, h.gpus.map((g) => GPU[g]));
+  fill($("display"), h.displays, c.display, h.displays.map((d) => ({ app: "In Zero Lab", window: "In a separate window" }[d])));
+  $("ram").value = String(c.ram); $("cpus").value = String(c.cpus);
+  $("network").checked = c.network; $("snapshot").checked = c.snapshot;
+  $("config-path").textContent = state.paths.config;
+  $("layouts-path").textContent = state.paths.layouts;
+}
 async function saveCfg() {
   state = await api("/api/config", { ram: +$("ram").value, cpus: +$("cpus").value, accel: $("accel").value,
     gpu: $("gpu").value, display: $("display").value, network: $("network").checked,
-    snapshot: $("snapshot").checked, image: $("image").value });
+    snapshot: $("snapshot").checked, ...(activeImage() ? { image: $("image").value } : {}) });
+  render();
+  const s = $("saved-state"); s.textContent = "Saved"; s.className = "saved";
+  clearTimeout(saveCfg.t); saveCfg.t = setTimeout(() => { s.textContent = "Changes save automatically"; s.className = ""; }, 2500);
 }
-for (const id of ["ram", "cpus", "accel", "gpu", "display", "network", "snapshot", "image"]) $(id).onchange = act(saveCfg);
-$("src-kind").onchange = () => { $("src-path-row").hidden = $("src-kind").value !== "local"; };
-$("img-add").onclick = act(async () => {
-  const kind = $("src-kind").value;
-  await api("/api/image/add", { name: $("img-name").value.trim(), user: $("img-user").value.trim(),
-    password: $("img-pass").value, source: kind === "local" ? $("src-path").value.trim() : kind });
-  $("img-pass").value = ""; $("progress").textContent = "Starting…";
-});
+$("settings-fields").onchange = act(saveCfg);
+$("new-image").onclick = () => { dlg.close(); setupOpen = true; render(); $("os-choices").querySelector("input:checked")?.focus(); };
+document.querySelectorAll("[data-reveal]").forEach((b) => (b.onclick = act(() => api("/api/reveal", { what: b.dataset.reveal }))));
 
-// ---------- boot / stop / status ----------
-function setStatus(s, extra = {}) {
-  status = s;
-  const el = $("status"); el.textContent = s + (extra.boot_seconds ? ` · booted in ${extra.boot_seconds}s` : "");
-  el.className = "pill " + s;
-  $("boot").disabled = s !== "stopped"; $("stop").disabled = s === "stopped";
-  if (s === "stopped") { disconnectScreen(); $("screen-msg").textContent = extra.exit_code ? "QEMU exited with an error; see the serial console." : "Boot the Pi to see its screen."; }
-}
-$("boot").onclick = act(async () => { await saveCfg(); await api("/api/boot", {}); });
+// ---------- boot / stop ----------
+$("boot").onclick = act(async () => { setupOpen = false; await api("/api/boot", {}); });
 $("stop").onclick = act(() => api("/api/stop", {}));
-
 function connectScreen() {
   if (rfb || !wsPort || state.cfg.display !== "app") return;
-  $("screen-msg").textContent = "Waiting for the display…";
   rfb = new RFB($("screen"), `ws://${location.host}/vnc?t=${encodeURIComponent(T)}`);
   rfb.scaleViewport = true; rfb.focusOnClick = true;
-  rfb.addEventListener("connect", () => { $("screen-msg").textContent = ""; });
-  rfb.addEventListener("disconnect", () => { rfb = null; if (status !== "stopped") setTimeout(connectScreen, 1500); });
+  rfb.addEventListener("connect", () => { screenUp = true; $("screen-msg").hidden = true; });
+  rfb.addEventListener("disconnect", () => { rfb = null; screenUp = false; renderScreen(); if (status !== "stopped") setTimeout(connectScreen, 1500); });
 }
 function disconnectScreen() { if (rfb) { const r = rfb; rfb = null; r.disconnect(); } }
 
 // ---------- events ----------
-const serialEl = $("serial"), procEl = $("proc");
 function append(el, text) {
   const stick = el.scrollTop + el.clientHeight >= el.scrollHeight - 4;
   el.textContent = (el.textContent + text).slice(-100000);
@@ -92,39 +164,56 @@ function append(el, text) {
 function onEvent(m) {
   if (m.type === "status") {
     if (m.ws_port) wsPort = m.ws_port;
-    setStatus(m.status, m);
-    if (m.status === "booting" || m.status === "running") { connectScreen(); if (m.status === "booting") applyIdle(); }
-  } else if (m.type === "serial") append(serialEl, m.data.replace(/\r/g, ""));
-  else if (m.type === "gpio") { const first = !pins.seen; pins = { ...m, seen: true }; updatePins(); if (first) applyIdle(); }
+    status = m.status;
+    if (status === "stopped") disconnectScreen();
+    if (status === "booting" || status === "running") { connectScreen(); if (status === "booting") applyIdle(); }
+    if (m.boot_seconds) toast(`Booted in ${m.boot_seconds} s`);
+    if (state) render();
+  } else if (m.type === "serial") append($("serial"), m.data.replace(/\r/g, ""));
+  else if (m.type === "gpio") { const first = !pins.seen; pins = { ...m, seen: true }; updateHeader(); bb.update(); if (first) applyIdle(); }
   else if (m.type === "proc") {
-    if (m.line !== undefined) append(procEl, m.line + "\n");
-    else if (m.state === "running") { procEl.textContent = ""; showTab("proc"); }
-    else if (m.state === "exited") append(procEl, `\n[exit status ${m.code}]\n`);
+    if (m.line !== undefined) append($("proc"), m.line + "\n");
+    else if (m.state === "running") { $("proc").textContent = ""; selectTab("code"); }
+    else if (m.state === "exited") append($("proc"), `\n[the program exited with status ${m.code}]\n`);
   } else if (m.type === "provision") {
-    const p = $("progress");
-    if (m.stage === "error") { p.textContent = "Setup failed: " + m.error; }
-    else if (m.stage === "done") { p.textContent = "Image ready. Press Boot!"; refresh(); }
-    else if (m.stage === "first-boot") p.textContent = "First boot: setting up your user (watch the serial console)…";
-    else p.textContent = `${m.stage}: ${m.total ? Math.round(100 * m.done / m.total) : 0}%`;
-  } else if (m.type === "images") { state.images = m.images; refresh(); }
+    if (m.stage === "error") {
+      $("setup-error").textContent = `Setup stopped: ${m.error}`; $("setup-error").hidden = false;
+      $("img-add").disabled = false; $("progress").hidden = true;
+      ["step-os", "step-user"].forEach((id) => $(id).classList.remove("done"));
+    } else if (m.stage === "done") {
+      showProgress(m); setupOpen = false; toast("Disk image ready. Press Boot."); refresh();
+    } else showProgress(m);
+  } else if (m.type === "images") refresh();
 }
 new EventSource(`/api/events?t=${encodeURIComponent(T)}`).onmessage = (e) => onEvent(JSON.parse(e.data));
 
-function showTab(name) {
-  document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
-  serialEl.hidden = name !== "serial"; procEl.hidden = name !== "proc";
+// ---------- tabs ----------
+const TABS = ["code", "serial"];
+function selectTab(name) {
+  TABS.forEach((t) => {
+    const on = t === name;
+    $(`tab-${t}`).setAttribute("aria-selected", String(on)); $(`tab-${t}`).tabIndex = on ? 0 : -1;
+    $(`panel-${t}`).hidden = !on;
+  });
 }
-document.querySelectorAll(".tabs button").forEach((b) => (b.onclick = () => showTab(b.dataset.tab)));
+TABS.forEach((t, i) => {
+  $(`tab-${t}`).onclick = () => selectTab(t);
+  $(`tab-${t}`).onkeydown = (e) => {
+    const d = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+    if (d) { const n = TABS[(i + d + TABS.length) % TABS.length]; selectTab(n); $(`tab-${n}`).focus(); }
+  };
+});
 $("serial-in").onkeydown = act(async (e) => {
   if (e.key !== "Enter") return;
   await api("/api/serial", { text: e.target.value + "\r" }); e.target.value = "";
 });
 
 // ---------- drop-in code ----------
-// A file dropped anywhere else must not navigate the window away from the app.
 window.addEventListener("dragover", (e) => e.preventDefault());
 window.addEventListener("drop", (e) => e.preventDefault());
-function showStaged(list) { $("staged").innerHTML = list.slice(0, 50).map((f) => `<li>${esc(f)}</li>`).join("") + (list.length > 50 ? `<li>… ${list.length - 50} more</li>` : ""); }
+function showStaged(list) {
+  $("staged").innerHTML = list.slice(0, 40).map((f) => `<li>${esc(f)}</li>`).join("") + (list.length > 40 ? `<li>and ${list.length - 40} more</li>` : "");
+}
 async function walk(entry, prefix, out) {
   if (entry.isFile) out.push([prefix + entry.name, await new Promise((ok, err) => entry.file(ok, err))]);
   else if (entry.isDirectory) {
@@ -139,7 +228,7 @@ async function upload(items) {
     const r = await fetch("/api/project/file", { method: "POST", headers: { "X-Zero-Lab-Token": T, "X-Path": path }, body: file });
     const j = await r.json(); if (!r.ok) throw new Error(j.error); staged = j.staged;
   }
-  showStaged(staged); toast(`${items.length} file(s) ready — press Build & run`);
+  showStaged(staged); toast(`${items.length} file${items.length > 1 ? "s" : ""} ready to build`);
 }
 const drop = $("drop");
 drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
@@ -150,156 +239,71 @@ drop.ondrop = act(async (e) => {
   const items = []; for (const en of entries) await walk(en, "", items);
   await api("/api/project/clear", {}); await upload(items);
 });
+drop.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); picker.click(); } };
+drop.onclick = (e) => { if (e.target === drop || e.target.tagName === "STRONG") picker.click(); };
+const picker = Object.assign(document.createElement("input"), { type: "file", multiple: true, hidden: true });
+picker.onchange = act(async () => { await api("/api/project/clear", {}); await upload([...picker.files].map((f) => [f.name, f])); picker.value = ""; });
+document.body.append(picker);
 $("run").onclick = act(() => api("/api/project/run", {}));
 $("pstop").onclick = act(() => api("/api/project/stop", {}));
 $("pclear").onclick = act(async () => { await api("/api/project/clear", {}); showStaged([]); });
 $("autostart").onchange = act((e) => api("/api/project/autostart", { on: e.target.checked }));
 
-// ---------- GPIO pin strip ----------
-const pinEls = [];
-for (let i = 0; i < 28; i++) { const d = document.createElement("div"); d.className = "pin"; d.innerHTML = `<b></b>${i}`; $("pins").append(d); pinEls.push(d); }
-function updatePins() {
-  pinEls.forEach((d, i) => {
-    const fn = pins.fn[i]; d.className = "pin " + (fn === 0 ? "in" : fn === 1 ? "out" : "alt") + (pins.lev[i] ? " hi" : "");
-    d.title = `GPIO${i}: ${fn === 0 ? "input" : fn === 1 ? "output" : "alt function " + fn}, level ${pins.lev[i]}`;
-  });
-  widgets.forEach((w) => w.update && w.update());
-}
-const drive = (pin, level) => api("/api/gpio", { pin, level }).catch((e) => toast(e.message));
-
-// ---------- widgets ----------
-const DEFAULTS = {
-  button: { label: "Button", pins: [17], idle: 1 }, switch: { label: "Switch", pins: [22], on: false },
-  knob: { label: "Knob", pins: [5, 6, 13, 19], value: 0 }, led: { label: "LED", pins: [27], color: "#ff3b30", activeLow: false },
-  seg7: { label: "7-segment", pins: [2, 3, 4, 14, 15, 18, 23], activeLow: false }, probe: { label: "Probe", pins: [27] },
-};
-const SEGS = ["4,2 24,2 20,6 8,6", "26,4 26,24 22,21 22,8", "26,28 26,48 22,44 22,31", "4,50 24,50 20,46 8,46",
-  "2,28 2,48 6,44 6,31", "2,4 2,24 6,21 6,8", "4,26 8,23 20,23 24,26 20,29 8,29"];
-const lev = (p) => pins.lev[p] ?? 0;
-
-function makeWidget(spec) {
-  const w = { ...DEFAULTS[spec.type], ...spec, id: spec.id || crypto.randomUUID() };
-  w.pins = (Array.isArray(w.pins) ? w.pins : []).map(Number).filter((n) => n >= 0 && n < 28).slice(0, 8);
-  w.x = +w.x || 0; w.y = +w.y || 0; w.label = String(w.label ?? ""); w.value = +w.value || 0;
-  if (!w.pins.length) w.pins = [...DEFAULTS[spec.type].pins];
-  const el = document.createElement("div"); el.className = "w"; el.style.left = w.x + "px"; el.style.top = w.y + "px";
-  el.innerHTML = `<div class="t"><span></span><button title="Settings">⚙</button><button title="Remove">✕</button></div><div class="b"></div>`;
-  const body = el.querySelector(".b"), title = el.querySelector(".t span");
-  const relabel = () => (title.textContent = `${w.label} · GPIO ${w.pins.join(",")}`);
-  relabel();
-  const outActive = (p) => (lev(p) === (w.activeLow ? 0 : 1));
-
-  if (w.type === "button") {
-    body.innerHTML = `<button class="pushbtn" aria-label="${esc(w.label)}"></button>`;
-    const b = body.firstChild;
-    b.onpointerdown = (e) => { b.setPointerCapture(e.pointerId); b.classList.add("down"); drive(w.pins[0], 1 - w.idle); };
-    b.onpointerup = b.onpointercancel = () => { b.classList.remove("down"); drive(w.pins[0], w.idle); };
-    w.applyIdle = () => drive(w.pins[0], w.idle);
-  } else if (w.type === "switch") {
-    body.innerHTML = `<button class="toggle" role="switch" aria-label="${esc(w.label)}"></button>`;
-    const b = body.firstChild; const show = () => b.classList.toggle("on", w.on);
-    b.onclick = () => { w.on = !w.on; show(); drive(w.pins[0], w.on ? 1 : 0); };
-    w.applyIdle = () => drive(w.pins[0], w.on ? 1 : 0); show();
-  } else if (w.type === "knob") {
-    body.innerHTML = `<div class="knob" tabindex="0" role="slider"><div></div></div>`;
-    const k = body.firstChild, max = () => (1 << w.pins.length) - 1;
-    const show = () => { k.style.setProperty("--a", `${(360 * w.value) / max()}deg`); k.firstChild.textContent = w.value; k.setAttribute("aria-valuenow", w.value); };
-    const set = (v) => { v = Math.max(0, Math.min(max(), v)); if (v === w.value) return; w.value = v; show(); w.pins.forEach((p, i) => drive(p, (v >> i) & 1)); };
-    k.onpointerdown = (e) => { k.setPointerCapture(e.pointerId); const y0 = e.clientY, v0 = w.value;
-      k.onpointermove = (m) => set(v0 + Math.round((y0 - m.clientY) / 6)); };
-    k.onpointerup = () => (k.onpointermove = null);
-    k.onkeydown = (e) => { if (e.key === "ArrowUp") set(w.value + 1); if (e.key === "ArrowDown") set(w.value - 1); };
-    w.applyIdle = () => w.pins.forEach((p, i) => drive(p, (w.value >> i) & 1)); show();
-  } else if (w.type === "led") {
-    body.innerHTML = `<div class="led" style="color:${esc(w.color)}"></div>`;
-    w.update = () => body.firstChild.classList.toggle("on", outActive(w.pins[0]));
-  } else if (w.type === "seg7") {
-    body.innerHTML = `<svg class="seg7" viewBox="0 0 28 52" width="56" height="104">${SEGS.map((p) => `<polygon points="${p}"/>`).join("")}</svg>`;
-    w.update = () => body.querySelectorAll("polygon").forEach((s, i) => s.classList.toggle("on", w.pins[i] !== undefined && outActive(w.pins[i])));
-  } else if (w.type === "probe") {
-    body.innerHTML = `<canvas class="probe" width="180" height="40"></canvas>`;
-    const c = body.firstChild.getContext("2d"), hist = [];
-    w.update = () => hist.push([performance.now(), lev(w.pins[0])]);
-    const draw = () => {
-      if (!el.isConnected) return;
-      const now = performance.now(); while (hist.length > 1 && hist[1][0] < now - 10000) hist.shift();
-      c.clearRect(0, 0, 180, 40); c.strokeStyle = "#7CFC9A"; c.beginPath();
-      let lv = hist.length ? hist[0][1] : lev(w.pins[0]); c.moveTo(0, lv ? 8 : 32);
-      for (const [t, v] of hist) { const x = 180 * (1 - (now - t) / 10000); c.lineTo(x, lv ? 8 : 32); c.lineTo(x, v ? 8 : 32); lv = v; }
-      c.lineTo(180, lv ? 8 : 32); c.stroke(); requestAnimationFrame(draw);
-    };
-    requestAnimationFrame(draw);
+// ---------- 40-pin header, by physical position ----------
+const HEADER = ["3v3", "5v", 2, "5v", 3, "gnd", 4, 14, "gnd", 15, 17, 18, 27, "gnd", 22, 23, "3v3", 24, 10, "gnd",
+  9, 25, 11, 8, "gnd", 7, 0, 1, 5, "gnd", 6, 12, 13, "gnd", 19, 16, 26, 20, "gnd", 21];
+const pads = HEADER.map((f, i) => {
+  const li = document.createElement("li");
+  li.className = (i % 2 ? "even " : "odd ") + (typeof f === "number" ? "" : "p" + f).replace("pgnd", "gnd");
+  li.dataset.bcm = typeof f === "number" ? f : "";
+  li.title = `Pin ${i + 1}: ${typeof f === "number" ? "GPIO" + f : f.toUpperCase()}`;
+  $("header40").append(li);
+  return li;
+});
+function updateHeader() {
+  for (const li of pads) {
+    if (li.dataset.bcm === "") continue;
+    const g = +li.dataset.bcm, fn = pins.fn[g], hi = !!pins.lev[g];
+    const dir = fn === 0 ? "in" : fn === 1 ? "out" : "alt";
+    li.className = li.className.replace(/\b(in|out|alt|hi)\b/g, "").trim() + ` ${dir}${hi ? " hi" : ""}`;
+    li.setAttribute("aria-label", `${li.title.split(":")[0]}, GPIO${g}, ${dir === "in" ? "input" : dir === "out" ? "output" : "other function"}, ${hi ? "high" : "low"}`);
   }
-
-  // settings
-  const [gear, close] = el.querySelectorAll(".t button");
-  close.onclick = () => { el.remove(); widgets = widgets.filter((x) => x !== w); };
-  gear.onclick = () => {
-    const open = el.querySelector(".cfg"); if (open) return open.remove();
-    const cfg = document.createElement("div"); cfg.className = "cfg";
-    cfg.innerHTML = `<label>Label <input data-k="label" value="${esc(w.label)}"></label>
-      <label>GPIO (BCM, comma list${w.type === "seg7" ? ": a,b,c,d,e,f,g" : w.type === "knob" ? ", LSB first" : ""}) <input data-k="pins" value="${w.pins.join(",")}"></label>` +
-      (w.type === "button" ? `<label class="check"><input type="checkbox" data-k="idle" ${w.idle ? "checked" : ""}> Idle high (active-low, like a pull-up)</label>` : "") +
-      (w.type === "led" || w.type === "seg7" ? `<label class="check"><input type="checkbox" data-k="activeLow" ${w.activeLow ? "checked" : ""}> Lit when low</label>` : "") +
-      (w.type === "led" ? `<label>Colour <input type="color" data-k="color" value="${esc(w.color)}"></label>` : "");
-    cfg.oninput = () => {
-      for (const i of cfg.querySelectorAll("input")) {
-        const k = i.dataset.k;
-        if (k === "pins") { const ps = i.value.split(",").map((s) => parseInt(s, 10)).filter((n) => n >= 0 && n < 28); if (ps.length) w.pins = ps.slice(0, 8); }
-        else if (k === "idle") w.idle = i.checked ? 1 : 0;
-        else if (k === "activeLow") w.activeLow = i.checked;
-        else w[k] = i.value;
-      }
-      if (w.type === "led") body.firstChild.style.color = w.color;
-      relabel(); w.update && w.update();
-    };
-    el.append(cfg);
-  };
-
-  // drag by the title bar
-  const bar = el.querySelector(".t");
-  bar.onpointerdown = (e) => {
-    if (e.target.tagName === "BUTTON") return;
-    bar.setPointerCapture(e.pointerId); const dx = e.clientX - w.x, dy = e.clientY - w.y;
-    bar.onpointermove = (m) => { w.x = Math.max(0, m.clientX - dx); w.y = Math.max(0, m.clientY - dy); el.style.left = w.x + "px"; el.style.top = w.y + "px"; };
-  };
-  bar.onpointerup = () => (bar.onpointermove = null);
-
-  $("canvas").append(el); widgets.push(w); w.update && w.update();
-  return w;
 }
-function applyIdle() { if (pins.seen) widgets.forEach((w) => w.applyIdle && w.applyIdle()); }
+
+// ---------- breadboard parts ----------
+const drive = (pin, level) => api("/api/gpio", { pin, level }).catch((e) => toast(e.message));
+const bb = breadboard({ canvas: $("canvas"), drive, lev: (p) => pins.lev[p] ?? 0, esc });
+const applyIdle = () => { if (pins.seen) bb.applyIdle(); };
 let addPos = 0;
 document.querySelectorAll("[data-add]").forEach((b) => (b.onclick = () => {
-  addPos = (addPos + 1) % 6; makeWidget({ type: b.dataset.add, x: 16 + addPos * 22, y: 16 + addPos * 26 }).applyIdle?.();
+  addPos = (addPos + 1) % 6; const w = bb.make({ type: b.dataset.add, x: 16 + addPos * 22, y: 16 + addPos * 26 });
+  if (pins.seen) w.applyIdle?.();
 }));
-
-// ---------- layouts ----------
-const SAVE_KEYS = ["id", "type", "x", "y", "label", "pins", "idle", "on", "value", "color", "activeLow"];
-const layout = () => ({ version: 1, widgets: widgets.map((w) => Object.fromEntries(SAVE_KEYS.filter((k) => k in w).map((k) => [k, w[k]]))) });
-function loadLayout(l) {
-  if (!l || l.version !== 1 || !Array.isArray(l.widgets)) throw new Error("not a Zero Lab layout");
-  $("canvas").innerHTML = ""; widgets = [];
-  for (const s of l.widgets) if (DEFAULTS[s.type]) makeWidget(s);
-  applyIdle();
-}
 $("layout-save").onclick = act(async () => {
-  const name = $("layout-name").value.trim() || "my-layout";
-  const r = await api("/api/layout/save", { name, layout: layout() });
-  fill($("layout-list"), r.layouts, name); toast(`Saved “${name}”`);
+  const name = $("layout-name").value.trim() || $("layout-list").value || "my-layout";
+  const r = await api("/api/layout/save", { name, layout: bb.layout() });
+  fill($("layout-list"), r.layouts, name); $("layout-name").value = "";
+  toast(`Saved “${name}” to ${state.paths.layouts}`);
 });
-$("layout-load").onclick = act(async () => loadLayout(await api(`/api/layout?name=${encodeURIComponent($("layout-list").value)}`)));
+$("layout-load").onclick = act(async () => { bb.load(await api(`/api/layout?name=${encodeURIComponent($("layout-list").value)}`)); applyIdle(); });
 $("layout-export").onclick = act(async () => {
-  const name = $("layout-list").value; if (!name) throw new Error("save the layout first");
-  toast("Exported to " + (await api("/api/layout/export", { name })).path);
+  const name = $("layout-list").value; if (!name) throw new Error("Save the layout first, then copy it");
+  toast("Copied to " + (await api("/api/layout/export", { name })).path);
 });
-const cv = $("canvas");
-cv.ondragover = (e) => e.preventDefault();
-cv.ondrop = act(async (e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) loadLayout(JSON.parse(await f.text())); });
-
-// starter layout: matches samples/button-led-*
-loadLayout({ version: 1, widgets: [
-  { type: "button", x: 20, y: 20, label: "Button", pins: [17], idle: 1 },
-  { type: "led", x: 160, y: 20, label: "LED", pins: [27], color: "#ff3b30" },
+$("canvas").ondragover = (e) => e.preventDefault();
+$("canvas").ondrop = act(async (e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) { bb.load(JSON.parse(await f.text())); applyIdle(); } });
+bb.load({ version: 1, widgets: [ // matches samples/button-led-*
+  { type: "button", x: 20, y: 24, label: "Button", pins: [17], idle: 1 },
+  { type: "led", x: 196, y: 24, label: "LED", pins: [27], color: "#ff3b30" },
 ] });
+
+// ---------- render ----------
+function render() {
+  renderSummary(); renderSettings(); updateControls(); renderScreen();
+  if (!$("setup").hidden && !state.busy) renderSetup();
+  const ll = $("layout-list"), names = state.layouts;
+  fill(ll, names.length ? names : [""], ll.value, names.length ? names : ["No saved layouts yet"]);
+  $("layout-load").disabled = $("layout-export").disabled = !names.length;
+}
+async function refresh() { state = await api("/api/state"); status = state.status; render(); }
 refresh().catch((e) => toast(e.message));

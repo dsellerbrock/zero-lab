@@ -221,6 +221,22 @@ class ServerTest(unittest.TestCase):
         self.assertIn(b'"tok"', body)
         self.assertEqual(self.req("GET", "/static/../server.py")[0], 404)
 
+    def test_settings_locked_while_running(self):
+        class Running:
+            def poll(self):
+                return None
+        self.app.vm.proc = Running()
+        try:
+            code, body = self.req("POST", "/api/config", token="tok", body={"ram": 256})
+            self.assertEqual(code, 400)
+            self.assertIn(b"Stop the Pi", body)
+        finally:
+            self.app.vm.proc = None
+        self.assertEqual(self.req("POST", "/api/config", token="tok", body={"ram": 256})[0], 200)
+
+    def test_reveal_only_known_places(self):
+        self.assertEqual(self.req("POST", "/api/reveal", token="tok", body={"what": "/etc/passwd"})[0], 400)
+
     def test_layout_names(self):
         self.assertEqual(self.req("POST", "/api/layout/save", token="tok", body={"name": "../x", "layout": {}})[0], 400)
         self.assertEqual(self.req("POST", "/api/layout/save", token="tok", body={"name": "ok", "layout": {"version": 1}})[0], 200)

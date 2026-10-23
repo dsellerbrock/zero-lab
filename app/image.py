@@ -105,7 +105,7 @@ def bootfs_offset(img):
     with open(img, "rb") as f:
         mbr = f.read(512)
     if mbr[510:512] != b"\x55\xaa":
-        raise ValueError("not a Raspberry Pi OS disk image (no MBR)")
+        raise ValueError("That file is not a Raspberry Pi OS disk image. Choose an official .img or .img.xz file.")
     return int.from_bytes(mbr[446 + 8:446 + 12], "little") * 512
 
 
@@ -181,6 +181,7 @@ def prepare(source, imgdir, user, password, qemu_img, progress):
         else:
             clone(src, base)
     progress("prepare", 0, 1)
+    bootfs_offset(base)  # fail early, in plain words, on a file that is not a Pi OS image
     ssh = imgdir / "ssh"
     ssh.mkdir(exist_ok=True)
     key = ssh / "id_ed25519"

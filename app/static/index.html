@@ -10,96 +10,144 @@
 <script type="module" src="/static/app.js"></script>
 </head>
 <body>
-<header>
-  <img src="/static/icon.svg" alt="" class="logo">
-  <h1>Zero Lab</h1>
-  <span id="status" class="pill">stopped</span>
-  <span id="hostinfo" class="muted"></span>
-  <div class="spacer"></div>
-  <button id="boot" class="primary">▶ Boot</button>
-  <button id="stop">■ Stop</button>
+<header class="bar">
+  <div class="brand"><img src="/static/icon.svg" alt=""><h1>Zero Lab</h1></div>
+  <p id="status" class="status" role="status" aria-live="polite"><span class="lamp" aria-hidden="true"></span><span id="status-text">Stopped</span></p>
+  <button id="summary" class="summary" type="button" aria-haspopup="dialog" aria-controls="settings"
+          title="Open settings"></button>
+  <div class="grow"></div>
+  <p id="boot-reason" class="reason"></p>
+  <button id="boot" class="btn go" type="button">Boot</button>
+  <button id="stop" class="btn halt" type="button">Stop</button>
 </header>
 
-<main>
-  <aside id="left">
-    <section>
-      <h2>Disk image</h2>
-      <select id="image" aria-label="Disk image"></select>
-      <details id="addimg">
-        <summary>Add Raspberry Pi OS image…</summary>
-        <label>Image
-          <select id="src-kind"></select>
-        </label>
-        <label id="src-path-row" hidden>Path to .img or .img.xz
-          <input id="src-path" placeholder="/path/to/raspios.img.xz">
-        </label>
-        <label>Name <input id="img-name" value="pi"></label>
-        <label>Pi user <input id="img-user" value="pi" autocomplete="off"></label>
-        <label>Pi password <input id="img-pass" type="password" autocomplete="new-password"></label>
-        <button id="img-add">Download &amp; set up</button>
-        <p class="muted small">Downloads from raspberrypi.com and checks its SHA-256. The first boot sets up your user and takes a few minutes (longer without acceleration).</p>
-      </details>
-      <div id="progress" class="small"></div>
-    </section>
+<main class="bench">
+  <section class="monitor" aria-label="The Pi">
+    <div id="screen" class="screen">
+      <p id="screen-msg" class="screen-msg"></p>
 
-    <section>
-      <h2>VM settings</h2>
-      <label>Memory <select id="ram"><option>256</option><option>512</option><option>768</option><option>1024</option></select> MiB</label>
-      <label>CPUs <select id="cpus"><option>1</option><option>2</option><option>3</option><option>4</option></select></label>
-      <label>Accelerator <select id="accel"></select></label>
-      <label>GPU <select id="gpu"></select></label>
-      <label>Display <select id="display"><option value="app">In this window</option><option value="window">Separate window</option></select></label>
-      <label class="check"><input type="checkbox" id="network"> Internet access</label>
-      <label class="check"><input type="checkbox" id="snapshot"> Throw away changes on stop</label>
-    </section>
-
-    <section>
-      <h2>Your code</h2>
-      <div id="drop" class="drop" tabindex="0">Drop a file, folder or .zip<br><span class="muted small">Python, C/C++ (Makefile/CMake), Rust, Go, or an ARM binary</span></div>
-      <ul id="staged" class="small"></ul>
-      <div class="row">
-        <button id="run" class="primary">Build &amp; run</button>
-        <button id="pstop">Stop</button>
-        <button id="pclear">Clear</button>
-      </div>
-      <label class="check"><input type="checkbox" id="autostart"> Start on boot</label>
-      <p class="muted small">Code is built and run inside the Pi only.</p>
-    </section>
-  </aside>
-
-  <section id="center">
-    <div id="screen"><div id="screen-msg" class="muted">Boot the Pi to see its screen.</div></div>
-    <div class="tabs">
-      <button data-tab="serial" class="on">Serial console</button>
-      <button data-tab="proc">Program output</button>
+      <form id="setup" class="setup" hidden>
+        <h2 id="setup-title">Set up your Pi</h2>
+        <p class="lede">Zero Lab needs a Raspberry Pi OS disk image. It downloads the official one from raspberrypi.com and checks it, or uses a file you already have. Nothing leaves your computer.</p>
+        <ol class="steps">
+          <li class="step" id="step-os">
+            <h3>Choose an operating system</h3>
+            <fieldset id="os-choices" class="choices"><legend class="sr">Operating system</legend></fieldset>
+            <label id="local-row" class="field" hidden>Image file (.img or .img.xz)
+              <input id="src-path" placeholder="/Users/you/Downloads/raspios.img.xz" autocomplete="off">
+            </label>
+          </li>
+          <li class="step" id="step-user">
+            <h3>Create the Pi's user</h3>
+            <div class="pair">
+              <label class="field">User name <input id="img-user" value="pi" autocomplete="off" spellcheck="false"></label>
+              <label class="field">Password <input id="img-pass" type="password" autocomplete="new-password"></label>
+            </div>
+            <p class="note">You log in to the Pi's desktop and terminal with these. They stay on this computer.</p>
+          </li>
+          <li class="step" id="step-go">
+            <h3>Download and set up</h3>
+            <p class="note" id="go-note">About 5 minutes on this Mac; the first boot finishes the setup.</p>
+            <div class="row">
+              <button id="img-add" class="btn go" type="submit">Download and set up</button>
+              <button id="setup-cancel" class="btn quiet" type="button" hidden>Cancel</button>
+            </div>
+            <ol id="progress" class="progress" hidden>
+              <li data-stage="download">Download</li>
+              <li data-stage="decompress">Unpack</li>
+              <li data-stage="prepare">Prepare boot files</li>
+              <li data-stage="first-boot">First boot: create your user</li>
+            </ol>
+            <p id="setup-error" class="error" role="alert" hidden></p>
+          </li>
+        </ol>
+      </form>
     </div>
-    <pre id="serial" class="console"></pre>
-    <pre id="proc" class="console" hidden></pre>
-    <input id="serial-in" class="console-in" placeholder="Type into the serial console, Enter to send">
+
+    <div class="dock">
+      <div class="tabs" role="tablist" aria-label="Code and console">
+        <button role="tab" id="tab-code" aria-controls="panel-code" aria-selected="true">Code</button>
+        <button role="tab" id="tab-serial" aria-controls="panel-serial" aria-selected="false" tabindex="-1">Serial console</button>
+      </div>
+      <div role="tabpanel" id="panel-code" aria-labelledby="tab-code" class="panel code">
+        <div id="drop" class="drop" tabindex="0" role="button" aria-label="Choose code files, or drop them here" aria-describedby="drop-help">
+          <strong>Drop a file, folder or .zip</strong>
+          <span id="drop-help">Python, C or C++ with a Makefile or CMake, Rust, Go, or a ready-made ARM program. It is built and run inside the Pi, never on this computer.</span>
+          <ul id="staged" class="staged"></ul>
+        </div>
+        <div class="code-side">
+          <div class="row">
+            <button id="run" class="btn go" type="button">Build and run</button>
+            <button id="pstop" class="btn" type="button">Stop program</button>
+            <button id="pclear" class="btn quiet" type="button">Clear</button>
+          </div>
+          <p id="code-hint" class="note" aria-live="polite"></p>
+          <label class="check"><input type="checkbox" id="autostart"> Start on boot</label>
+          <pre id="proc" class="console" aria-label="Program output" tabindex="0"></pre>
+        </div>
+      </div>
+      <div role="tabpanel" id="panel-serial" aria-labelledby="tab-serial" class="panel" hidden>
+        <pre id="serial" class="console tall" aria-label="Serial console output" tabindex="0"></pre>
+        <input id="serial-in" class="console-in" aria-label="Send to serial console" placeholder="Type a command and press Enter">
+      </div>
+    </div>
   </section>
 
-  <aside id="right">
-    <h2>GPIO sandbox</h2>
-    <div id="pins" class="pins" title="BCM 0–27: I = input, O = output, A = other function"></div>
-    <div id="palette" class="row wrap">
-      <button data-add="button">+ Button</button>
-      <button data-add="switch">+ Switch</button>
-      <button data-add="knob">+ Knob</button>
-      <button data-add="led">+ LED</button>
-      <button data-add="seg7">+ 7-segment</button>
-      <button data-add="probe">+ Probe</button>
+  <section class="breadboard" aria-labelledby="bb-title">
+    <div class="bb-head">
+      <h2 id="bb-title">GPIO</h2>
+      <p class="note">Header pins by physical position. Gold means high.</p>
     </div>
-    <div id="canvas" class="canvas"></div>
-    <div class="row wrap">
-      <input id="layout-name" placeholder="layout name" size="10">
-      <button id="layout-save">Save</button>
-      <select id="layout-list" aria-label="Saved layouts"></select>
-      <button id="layout-load">Load</button>
-      <button id="layout-export">Export</button>
+    <ol id="header40" class="header40" aria-label="40-pin header"></ol>
+    <div class="parts" role="toolbar" aria-label="Add a part">
+      <button data-add="button" type="button">Button</button>
+      <button data-add="switch" type="button">Switch</button>
+      <button data-add="knob" type="button">Knob</button>
+      <button data-add="led" type="button">LED</button>
+      <button data-add="seg7" type="button">7-segment</button>
+      <button data-add="probe" type="button">Probe</button>
     </div>
-    <p class="muted small">Drag widgets by their title. ⚙ sets pins. Drop a .json layout here to import.</p>
-  </aside>
+    <div id="canvas" class="canvas" aria-label="Parts on the breadboard"></div>
+    <div class="layouts">
+      <div class="row">
+        <label class="sr" for="layout-list">Saved layouts</label>
+        <select id="layout-list"></select>
+        <button id="layout-load" class="btn" type="button">Open</button>
+        <button id="layout-export" class="btn quiet" type="button">Copy to Downloads</button>
+      </div>
+      <div class="row">
+        <input id="layout-name" aria-label="Name for this layout" placeholder="Name this layout" size="16">
+        <button id="layout-save" class="btn" type="button">Save layout</button>
+      </div>
+      <p class="where">Saved layouts are files in <code id="layouts-path"></code> <button class="link" data-reveal="layouts" type="button">Show</button></p>
+    </div>
+  </section>
 </main>
-<div id="toast" role="status"></div>
+
+<dialog id="settings" class="drawer" aria-labelledby="settings-title">
+  <form method="dialog" class="drawer-body">
+    <header class="drawer-head">
+      <h2 id="settings-title">Settings</h2>
+      <button class="btn quiet" value="close" aria-label="Close settings">Close</button>
+    </header>
+    <p id="lock-note" class="lock" hidden>The Pi is running. Stop it to change these.</p>
+    <fieldset id="settings-fields">
+      <legend class="sr">Virtual machine</legend>
+      <label class="field">Disk image <select id="image"></select></label>
+      <button id="new-image" class="link" type="button">Set up another disk image</button>
+      <label class="field">Memory <select id="ram"><option value="256">256 MB</option><option value="512">512 MB (like a real Zero 2 W)</option><option value="768">768 MB</option><option value="1024">1 GB</option></select></label>
+      <label class="field">CPU cores <select id="cpus"><option>1</option><option>2</option><option>3</option><option>4</option></select></label>
+      <label class="field">Speed-up <select id="accel"></select></label>
+      <label class="field">Graphics <select id="gpu"></select></label>
+      <label class="field">Show the screen <select id="display"></select></label>
+      <label class="check"><input type="checkbox" id="network"> Internet access for the Pi</label>
+      <label class="check"><input type="checkbox" id="snapshot"> Throw away the Pi's changes when it stops</label>
+    </fieldset>
+    <footer class="drawer-foot">
+      <p class="where"><span id="saved-state">Changes save automatically</span> to <code id="config-path"></code> <button class="link" data-reveal="config" type="button">Show</button></p>
+    </footer>
+  </form>
+</dialog>
+<div id="toast" role="status" aria-live="polite"></div>
 </body>
 </html>

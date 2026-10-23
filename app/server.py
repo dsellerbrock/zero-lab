@@ -51,6 +51,8 @@ class Hub:
         msg = {"type": kind, **data}
         if kind == "serial":
             self.serial = (self.serial + data["data"])[-65536:]
+        elif kind == "provision" and data.get("stage") in ("done", "error"):
+            self.last.pop("provision", None)  # a finished setup is not news to the next page load
         elif kind != "proc" or "state" in data:
             self.last[kind] = msg
         line = json.dumps(msg)
@@ -77,6 +79,7 @@ class App:
         self.markers = {}        # marker name -> threading.Event
         self.busy = None         # name of a running background job
         self.cfg = self.load_cfg()
+        self.saved_at = None
 
     # ---------- config / state ----------
     def load_cfg(self):
@@ -86,21 +89,44 @@ class App:
             return dict(vmod.DEFAULTS)
 
     def save_cfg(self, cfg):
+        if self.vm.proc and self.vm.proc.poll() is None:
+            raise RuntimeError("Stop the Pi to change its settings")
         allowed = set(vmod.DEFAULTS) | {"image"}
         self.cfg = {k: v for k, v in {**self.cfg, **cfg}.items() if k in allowed}
         (self.data / "config.json").write_text(json.dumps(self.cfg))
+        self.saved_at = time.time()
 
     def images(self):
         out = []
         for d in sorted((self.data / "images").iterdir()):
             try:
-                out.append({"name": d.name, **json.loads((d / "state.json").read_text())})
+                st = json.loads((d / "state.json").read_text())
             except (OSError, ValueError):
-                out.append({"name": d.name, "provisioned": False, "broken": True})
+                st = {"provisioned": False, "broken": True}
+            entry = next((e for e in image.CATALOG if e["id"] == st.get("source")), None)
+            label = entry["name"] if entry else Path(st.get("source", d.name)).name
+            out.append({"name": d.name, "label": label, **st})
         return out
+
+    def paths(self):
+        return {"data": str(self.data), "layouts": str(self.data / "layouts"),
+                "config": str(self.data / "config.json"), "downloads": str(Path.home() / "Downloads")}
+
+    def reveal(self, what):
+        """Show one of Zero Lab's own folders/files in the system file manager (never arbitrary paths)."""
+        path = Path(self.paths()[what])
+        target = path if path.exists() else path.parent
+        if platform.system() == "Darwin":
+            subprocess.run(["open", "-R", str(target)], check=False)
+        elif "microsoft" in platform.release().lower():
+            win = subprocess.run(["wslpath", "-w", str(target)], capture_output=True, text=True).stdout.strip()
+            subprocess.run(["explorer.exe", f"/select,{win}"], check=False)
+        else:
+            subprocess.run(["xdg-open", str(target if target.is_dir() else target.parent)], check=False)
 
     def state(self):
         return {"host": self.host, "cfg": vmod.resolve(self.cfg, self.host), "images": self.images(),
+                "paths": self.paths(), "saved_at": self.saved_at,
                 "catalog": image.CATALOG, "status": self.vm.status, "busy": self.busy,
                 "layouts": sorted(p.stem for p in (self.data / "layouts").glob("*.json")),
                 "staged": [r for r, _ in self.files]}
@@ -194,6 +220,7 @@ class App:
             progress("done", 1, 1)
         except Exception as e:  # noqa: BLE001 - report any failure to the UI
             self.vm.stop()
+            shutil.rmtree(d, ignore_errors=True)  # a half-made image is useless; the user retries
             self.hub.emit("provision", stage="error", error=str(e))
         finally:
             self.busy = None
@@ -400,6 +427,10 @@ def make_handler(app, token, port):
                 out = Path.home() / "Downloads" / f"{b['name']}.zerolab.json"
                 out.write_bytes(app.layout_path(b["name"]).read_bytes())
                 return {"path": str(out)}
+            elif path == "/api/reveal":
+                if b.get("what") not in app.paths():
+                    raise ValueError("unknown location")
+                app.reveal(b["what"])
             elif path == "/api/screenshot":
                 out = app.vm.run / f"screen-{int(time.time())}.png"
                 app.vm.qmp("screendump", filename=str(out), format="png")
