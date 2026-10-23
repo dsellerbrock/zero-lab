@@ -109,14 +109,15 @@ HOME=/tmp/zl-test ZL_QEMU_DIR="build/mac/Zero Lab.app/Contents/Resources/qemu" p
 python3 tests/e2e.py --url http://127.0.0.1:8660 --provision desktop --image e2e --gpu venus
 ```
 
-On Linux or Windows, use `--gpu soft --accel tcg`. For the AppImage, start it instead of `server.py`: `HOME=/tmp/zl-test ZL_IN_TERMINAL=1 ./Zero-Lab-<v>-linux-x86_64.AppImage --port 8660 &` (`ZL_IN_TERMINAL=1` keeps it from opening a terminal window). On Windows, run the installed copy's Python with `PYTHONUTF8=1`: `"%LOCALAPPDATA%\Programs\Zero Lab\zero-lab\python\python.exe" app\server.py`. GitHub's macOS runners can't use the Apple Hypervisor, so the e2e runs on real machines before a release, not in CI.
+On Linux or Windows, use `--gpu soft --accel tcg`. For the AppImage, start it instead of `server.py`: `HOME=/tmp/zl-test ZL_IN_TERMINAL=1 ./Zero-Lab-<v>-linux-x86_64.AppImage --port 8660 &` (`ZL_IN_TERMINAL=1` keeps it from opening a terminal window). On Windows, run the installed copy's Python with `PYTHONUTF8=1`: `"%LOCALAPPDATA%\Programs\Zero Lab\zero-lab\python\python.exe" app\server.py`. GitHub's macOS runners can't use the Apple Hypervisor, so the e2e runs on real machines before a release, not in CI. CI does the same against every installed download (jobs `macos-e2e`, `appimage-e2e`, `windows-e2e`), with `--gpu soft --accel tcg`: GitHub's runners have no Apple Hypervisor and no GPU. A failed job uploads `<platform>-e2e-logs` (e2e log and JSON, engine log, serial.log, qemu.log, screenshots).
 
 ## Releasing
 
 1. Bump `CFBundleShortVersionString` in `mac/Info.plist`. Bump pins in `tools/pins.sh` if needed.
-2. Push a tag `v<version>`; CI builds every download.
-3. Run the e2e on a Mac, on Linux, and on Windows against the CI artifacts.
-4. Create a **draft** release with the artifacts. A person reviews it and publishes it.
+2. Push a tag `v<version>`. CI builds every download, installs each one and runs the e2e against it.
+3. A release needs every e2e job green: `macos-e2e`, `appimage-e2e`, `windows-e2e`. These jobs are separate from the builds, so a flaky runner never blocks the artifacts. Rerun only the failed ones with `gh run rerun <run-id> --failed --repo dsellerbrock/zero-lab`; that reuses the build artifacts.
+4. CI only covers TCG + soft graphics. Also run the e2e on a real Mac with the default HVF + Venus (above), because that's the path Mac friends actually take.
+5. Create a **draft** release with the artifacts. A person reviews it and publishes it.
 
 ```bash
 gh release create v<version> --repo dsellerbrock/pisim --draft --title "Zero Lab <version>" <files>
