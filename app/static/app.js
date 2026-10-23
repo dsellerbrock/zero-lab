@@ -172,7 +172,7 @@ document.querySelectorAll("[data-reveal]").forEach((b) => (b.onclick = act(() =>
 $("boot").onclick = act(async () => { setupOpen = false; await api("/api/boot", {}); });
 $("stop").onclick = act(() => api("/api/stop", {}));
 function connectScreen() {
-  if (rfb || !wsPort || state.cfg.display !== "app" || GPIO_ONLY) return;
+  if (rfb || !wsPort || !state || state.cfg.display !== "app" || GPIO_ONLY) return;  // !state: the status event can beat the first state load
   rfb = new RFB($("screen"), `ws://${location.host}/vnc?t=${encodeURIComponent(T)}`);
   rfb.scaleViewport = true; rfb.focusOnClick = true;
   rfb.addEventListener("connect", () => { screenUp = true; $("screen-msg").hidden = true; });
@@ -468,6 +468,7 @@ function render() {
 async function refresh() {
   [state, ready] = await Promise.all([api("/api/state"), api("/api/readiness")]);
   status = state.status; render(); renderReadiness();
+  if (status === "booting" || status === "running") connectScreen();  // page opened while the Pi runs
 }
 
 // ---------- readiness stop light ----------
