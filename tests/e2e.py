@@ -99,7 +99,7 @@ def main():
     def step(name, ok, **info):
         res["steps"][name] = {"ok": bool(ok), **info}
         print(f"[{'PASS' if ok else 'FAIL'}] {name} {json.dumps(info)}", flush=True)
-        if not ok:
+        if not ok and name in ("provision", "boot"):  # nothing after these can run; other failures carry on
             print(json.dumps(res))
             c.call("/api/stop", {})
             sys.exit(1)
@@ -160,6 +160,8 @@ def main():
     # Button -> LED, in Python and in C (the compiled-language check)
     for sample in ("button-led-py", "button-led-c"):
         run_sample(sample)
+        c.call("/api/gpio", {"pin": 17, "level": 1})  # released, as the Button widget idles (pins start at 0)
+        time.sleep(0.5)
         lat = []
         for press in (0, 1, 0, 1):  # active-low button: 0 = pressed -> LED (27) on
             t, m = time.time(), c.mark()
@@ -240,6 +242,7 @@ def main():
     e = c.wait(lambda e: e["type"] == "status" and e["status"] == "stopped", 180, m)
     step("stop", e, seconds=round(time.time() - t), exit_code=e and e.get("exit_code"))
     print(json.dumps(res))
+    sys.exit(0 if all(v["ok"] for v in res["steps"].values()) else 1)
 
 
 if __name__ == "__main__":

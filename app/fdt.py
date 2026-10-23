@@ -120,6 +120,10 @@ def qemu_dtb(stock, gpu, root, chosen):
         t.set("/soc/mmc@7e300000", "dma-names", None)
         t.set("/soc/mmcnr@7e300000", "status", "disabled")
     t.set("/soc/fb", "status", "disabled")
+    # The Pi firmware adds the board revision; without it gpiozero (and pinctrl) won't run. 902120: Zero 2 W 1.0
+    if not any(c.name == "system" for c in t.root.children):
+        t.root.children.append(Node("system"))
+    t.set("/system", "linux,revision", (0x902120).to_bytes(4, "big"))
     t.set("/chosen", "zl-gpu-mode", gpu)
     for name, value in chosen.items():
         t.set("/chosen", name, value)

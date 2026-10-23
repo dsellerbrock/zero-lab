@@ -72,6 +72,7 @@ class FdtTest(unittest.TestCase):
         self.assertEqual(t.get("/soc/mmc@7e300000", "non-removable"), b"")
         self.assertEqual(t.get("/chosen", "zl-gpu-mode"), b"venus\0")
         self.assertEqual(t.get("/chosen", "zl-user"), b"pi\0")
+        self.assertEqual(t.get("/system", "linux,revision"), bytes.fromhex("00902120"))  # gpiozero needs it
         v = fdt.Tree(fdt.qemu_dtb(raw, "soft", "virtio", {}))
         self.assertEqual(v.get("/soc/mmc@7e202000", "status"), b"okay\0")  # SD untouched for virtio root
 
