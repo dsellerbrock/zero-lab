@@ -1,8 +1,11 @@
 #!/bin/sh
 # Runs as root on every Zero Lab desktop boot (kernel cmdline systemd.run, script from the DTB).
 # Trimmed from raspi-zero2w/desktop-input-setup.sh: input seat rule, compositor renderer, ready marker.
-exec >/dev/ttyAMA1 2>&1 || exec >/dev/console 2>&1
-echo ZL_SETUP_BEGIN
+exec >/dev/console 2>&1
+# Markers go through the kernel log: the Zero 2 W's Bluetooth claims the serial UART, which swallows plain
+# writes to /dev/ttyAMA1, but kernel messages always reach the console (raspi-zero2w network-probe.sh does this).
+mark() { printf '<4>%s\n' "$*" > /dev/kmsg 2>/dev/null || echo "$*"; }
+mark ZL_SETUP_BEGIN
 # The Pi has no clock battery: take the host's time so TLS, apt and make work.
 date -u -s "@$(tr -d '\000' < /proc/device-tree/chosen/zl-epoch)" >/dev/null 2>&1 || true
 
@@ -40,17 +43,17 @@ if [ -f /usr/bin/labwc-pi ]; then
     sed -i '/^exec .*labwc/ i\export WLR_NO_HARDWARE_CURSORS=1' /usr/bin/labwc-pi
 fi
 
-systemctl start ssh 2>/dev/null && echo ZL_SSH_READY
+systemctl start ssh 2>/dev/null && mark ZL_SSH_READY
 
 # Tell the app when the desktop panel and file manager are up (boot-time measurement).
 systemd-run --quiet --no-block --unit=zl-ready-watch.service /bin/sh -c '
   i=0
   while [ $i -lt 900 ]; do
     if pgrep -x wf-panel-pi >/dev/null && pgrep -x pcmanfm >/dev/null; then
-      echo ZL_DESKTOP_READY > /dev/ttyAMA1; exit 0
+      printf "<4>ZL_DESKTOP_READY\\n" > /dev/kmsg; exit 0
     fi
     i=$((i + 1)); sleep 1
   done'
 
 systemctl start --no-block graphical.target
-echo ZL_SETUP_DONE
+mark ZL_SETUP_DONE

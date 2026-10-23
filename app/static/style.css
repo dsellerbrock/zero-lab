@@ -178,23 +178,23 @@ input[type=checkbox], input[type=radio] { accent-color: var(--board); width: 16p
 .layouts select { min-width: 9em; }
 
 /* parts on the board */
-.w { position: absolute; background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-s); min-width: 96px;
+.w { position: absolute; background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-s); min-width: 72px; max-width: 150px;
      user-select: none; touch-action: none; box-shadow: 0 1px 0 var(--line); }
-.w .t { display: flex; gap: var(--s1); align-items: center; padding: 2px var(--s2); font-size: 12px; cursor: grab; border-bottom: 1px solid var(--line); }
+.w .t { display: flex; gap: 2px; align-items: center; padding: 1px var(--s1); font-size: 10px; cursor: grab; border-bottom: 1px solid var(--line); }
 .w .t span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .w .t button { font: inherit; padding: 0 var(--s1); border: 0; background: none; color: var(--ink-2); cursor: pointer; }
-.w .b { padding: var(--s2); display: flex; justify-content: center; align-items: center; }
-.pushbtn { width: 48px; height: 48px; border-radius: 50%; background: #3a3f3c; border: 6px solid #c9ccc8; cursor: pointer; }
+.w .b { padding: var(--s1) var(--s2); display: flex; justify-content: center; align-items: center; }
+.pushbtn { width: 38px; height: 38px; border-radius: 50%; background: #3a3f3c; border: 6px solid #c9ccc8; cursor: pointer; }
 .pushbtn.down { background: #1d201e; border-width: 7px; }
-.toggle { width: 52px; height: 26px; border-radius: 13px; background: var(--hole); position: relative; border: 0; cursor: pointer; }
-.toggle::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff;
+.toggle { width: 44px; height: 22px; border-radius: 13px; background: var(--hole); position: relative; border: 0; cursor: pointer; }
+.toggle::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff;
   transition: left .12s; box-shadow: 0 1px 2px rgb(0 0 0 / .3); }
-.toggle.on { background: var(--board); } .toggle.on::after { left: 29px; }
-.led { width: 26px; height: 26px; border-radius: 50%; background: #4a3a3a; border: 2px solid #2a2222; }
+.toggle.on { background: var(--board); } .toggle.on::after { left: 25px; }
+.led { width: 22px; height: 22px; border-radius: 50%; background: #4a3a3a; border: 2px solid #2a2222; }
 .led.on { background: currentColor; box-shadow: 0 0 12px 3px currentColor; }
-.knob { width: 60px; height: 60px; border-radius: 50%; background: conic-gradient(var(--board) var(--a), var(--hole) 0);
+.knob { width: 50px; height: 50px; border-radius: 50%; background: conic-gradient(var(--board) var(--a), var(--hole) 0);
         display: grid; place-items: center; cursor: ns-resize; }
-.knob div { width: 44px; height: 44px; border-radius: 50%; background: var(--paper); display: grid; place-items: center; font: 13px var(--mono); }
+.knob div { width: 36px; height: 36px; border-radius: 50%; background: var(--paper); display: grid; place-items: center; font: 13px var(--mono); }
 svg.seg7 polygon { fill: #3a2a2a; } svg.seg7 polygon.on { fill: #ff3b30; }
 canvas.probe { background: var(--console); border-radius: var(--r-s); }
 

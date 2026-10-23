@@ -60,19 +60,19 @@ export function breadboard({ canvas, drive, lev, esc }) {
       body.innerHTML = `<div class="led" role="img" aria-label="" style="color:${esc(w.color)}"></div>`;
       w.update = () => { const on = outActive(w.pins[0]); body.firstChild.classList.toggle("on", on); };
     } else if (w.type === "seg7") {
-      body.innerHTML = `<svg class="seg7" viewBox="0 0 28 52" width="52" height="96" role="img" aria-label="">${SEGS.map((p) => `<polygon points="${p}"/>`).join("")}</svg>`;
+      body.innerHTML = `<svg class="seg7" viewBox="0 0 28 52" width="40" height="74" role="img" aria-label="">${SEGS.map((p) => `<polygon points="${p}"/>`).join("")}</svg>`;
       w.update = () => body.querySelectorAll("polygon").forEach((s, i) => s.classList.toggle("on", w.pins[i] !== undefined && outActive(w.pins[i])));
     } else if (w.type === "probe") {
-      body.innerHTML = `<canvas class="probe" width="180" height="40" role="img" aria-label=""></canvas>`;
+      body.innerHTML = `<canvas class="probe" width="140" height="34" role="img" aria-label=""></canvas>`;
       const c = body.firstChild.getContext("2d"), hist = [];
       w.update = () => hist.push([performance.now(), lev(w.pins[0])]);
       const draw = () => {
         if (!el.isConnected) return;
         const now = performance.now(); while (hist.length > 1 && hist[1][0] < now - 10000) hist.shift();
-        c.clearRect(0, 0, 180, 40); c.strokeStyle = "#7CFC9A"; c.beginPath();
-        let lv = hist.length ? hist[0][1] : lev(w.pins[0]); c.moveTo(0, lv ? 8 : 32);
-        for (const [t, v] of hist) { const x = 180 * (1 - (now - t) / 10000); c.lineTo(x, lv ? 8 : 32); c.lineTo(x, v ? 8 : 32); lv = v; }
-        c.lineTo(180, lv ? 8 : 32); c.stroke(); requestAnimationFrame(draw);
+        c.clearRect(0, 0, 140, 34); c.strokeStyle = "#7CFC9A"; c.beginPath();
+        let lv = hist.length ? hist[0][1] : lev(w.pins[0]); c.moveTo(0, lv ? 7 : 27);
+        for (const [t, v] of hist) { const x = 140 * (1 - (now - t) / 10000); c.lineTo(x, lv ? 7 : 27); c.lineTo(x, v ? 7 : 27); lv = v; }
+        c.lineTo(140, lv ? 7 : 27); c.stroke(); requestAnimationFrame(draw);
       };
       requestAnimationFrame(draw);
     }
