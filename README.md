@@ -28,26 +28,14 @@ Downloads: https://pisim.ellerbrock.dev. Instructions for friends: [docs/FRIENDS
 - **Settings** in a drawer (memory, cores, speed-up, graphics, screen, internet, throw-away mode), each with an explanation.
 
 ## Build from source
-You need macOS 26+ on Apple Silicon with Xcode command-line tools and Homebrew (`meson ninja pkg-config glib pixman libslirp`), or Linux.
+Everything builds from this repository; every input is pinned in [`tools/pins.sh`](tools/pins.sh). The full guide is [docs/BUILDING.md](docs/BUILDING.md): the kernel, the macOS dmg, the Linux/WSL zip, GPL sources, testing and releasing. CI builds every download: Actions → **Build installers**.
 
 ```bash
 git clone https://github.com/dsellerbrock/zero-lab.git
 ```
 
 ```bash
-cd zero-lab
-```
-
-**macOS app and dmg.** The QEMU fork is fetched from GitHub at the pinned commit. virglrenderer and libepoxy sources come from `ZL_VIRGL_SRC` and `ZL_EPOXY_SRC`; MoltenVK comes from `ZL_MOLTENVK`.
-
-```bash
-mac/build-bundle.sh all
-```
-
-**Linux and Windows zip** (includes all sources):
-
-```bash
-tools/make-linux-windows-bundle.sh
+cd zero-lab && kernel/build.sh && mac/build-bundle.sh all
 ```
 
 **Run from a checkout** against any build of the fork:

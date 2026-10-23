@@ -1,0 +1,61 @@
+# Builds every Zero Lab download from this repository alone (inputs pinned in tools/pins.sh).
+# Run it by hand (Actions → Build installers → Run workflow) or push a tag v*. It only produces
+# artifacts; publishing a release stays a person's job (docs/BUILDING.md, "Releasing").
+name: Build installers
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq mtools
+      - run: python3 -m unittest discover -s tests
+
+  kernel:  # the Pi OS 6.18.50 kernel with virtio built in; rebuilt only when its recipe changes
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - id: cache
+        uses: actions/cache@v4
+        with:
+          path: kernel/kernel8-virtio.img
+          key: kernel-${{ hashFiles('kernel/config', 'kernel/build.sh') }}
+      - if: steps.cache.outputs.cache-hit != 'true'
+        run: ZL_JOBS=4 kernel/build.sh
+      - uses: actions/upload-artifact@v4
+        with: { name: kernel, path: kernel/kernel8-virtio.img, if-no-files-found: error }
+
+  macos:  # Zero-Lab-<v>-macOS-arm64.dmg (needs the macOS 26 SDK: an Apple Silicon macOS 26 runner)
+    needs: [test, kernel]
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: kernel, path: kernel }
+      - run: brew install meson ninja pkg-config glib pixman libslirp librsvg
+      - run: ZL_JOBS=3 mac/build-bundle.sh all
+      - uses: actions/upload-artifact@v4
+        with: { name: macos-dmg, path: build/mac/Zero-Lab-*-macOS-arm64.dmg, if-no-files-found: error }
+
+  linux-windows-zip:  # Zero-Lab-<v>-linux-windows.zip (WSL / build-from-source fallback) + the kernel's GPL source
+    needs: [test, kernel]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: kernel, path: kernel }
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq librsvg2-bin imagemagick xz-utils zip
+      - run: tools/make-linux-windows-bundle.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-windows-zip
+          path: |
+            build/Zero-Lab-*-linux-windows.zip
+            build/Zero-Lab-*-kernel-source.tar
+          if-no-files-found: error

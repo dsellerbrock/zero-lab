@@ -11,7 +11,7 @@ cp "$ROOT/linux/setup.sh" "$ROOT/windows/setup.ps1" "$ROOT/windows/Install Zero 
 cp "$ROOT/docs/FRIENDS.md" "$S/Read me first.md"
 rsync -a --exclude __pycache__ --exclude src "$ROOT/app" "$ROOT/samples" "$ROOT/kernel" "$S/zero-lab/"
 rsvg-convert -w 256 -h 256 "$ROOT/app/static/icon.svg" -o "$S/zero-lab/icon.png"
-magick -background none "$ROOT/app/static/icon.svg" -define icon:auto-resize=256,64,48,32,16 "$S/zero-lab/icon.ico"
+"$(command -v magick || command -v convert)" -background none "$ROOT/app/static/icon.svg" -define icon:auto-resize=256,64,48,32,16 "$S/zero-lab/icon.ico"
 "$ROOT/tools/source-bundle.sh" "$S/sources" >/dev/null
 chmod +x "$S/setup.sh" "$S/Install Zero Lab (Linux).desktop"
 (cd "$ROOT/build" && rm -f "$NAME.zip" && zip -qry "$NAME.zip" "$NAME")
