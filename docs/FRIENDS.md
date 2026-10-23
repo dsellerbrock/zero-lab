@@ -1,0 +1,48 @@
+# Zero Lab: a Raspberry Pi Zero 2 W on your computer
+
+Zero Lab runs a virtual Raspberry Pi Zero 2 W. You can boot it, use its desktop, wire up virtual buttons, knobs and LEDs to its GPIO pins, and drop in your own code to build and run on the Pi.
+
+## Install (once)
+
+### Mac with Apple Silicon (M1 or newer), macOS 26 or newer
+1. Open `Zero-Lab-…-macOS-arm64.dmg` and drag **Zero Lab** onto **Applications**.
+2. Double-click **Zero Lab**. The first time, macOS says it can't check the app. Open **System Settings → Privacy & Security**, scroll down, and click **Open Anyway** next to Zero Lab. The app is free software that isn't notarized by Apple.
+
+   If you prefer the Terminal, run `xattr -dr com.apple.quarantine "/Applications/Zero Lab.app"` instead.
+
+This is the fast version: the Pi's CPU runs on your Mac's own cores (Apple Hypervisor), and its graphics use your Mac's GPU (Vulkan through Metal).
+
+### Windows 10/11
+1. Unzip `Zero-Lab-…-linux-windows.zip`.
+2. Double-click **Install Zero Lab (Windows).cmd**. It installs WSL2 and Ubuntu if you don't have them (Windows asks for permission and may need a restart; afterwards, double-click it again), then builds Zero Lab. That takes 10–40 minutes the first time.
+3. Then double-click **Zero Lab** on your desktop. It opens in your browser. Closing the small black window stops the Pi.
+
+### Linux (Debian/Ubuntu, Fedora, Arch)
+1. Unzip `Zero-Lab-…-linux-windows.zip`.
+2. Double-click **Install Zero Lab (Linux).desktop**. GNOME may ask you to "Allow Launching" first. If double-clicking only opens a text editor, open a terminal in the folder and run `bash setup.sh`. It asks for your password to install build tools, then builds Zero Lab (10–40 minutes).
+3. Then start **Zero Lab** from your app menu or desktop.
+
+**How fast is it on Windows and Linux?** On a normal Intel/AMD PC, the Pi's ARM CPU has to be emulated instruction by instruction, because no PC can run ARM code natively. Everything works, but booting and apps are several times slower than on an Apple Silicon Mac.
+
+## First run
+1. Under **Disk image**, choose an official Raspberry Pi OS image (Zero Lab downloads it from raspberrypi.com and checks it), or pick an image file you already have.
+2. Choose a user name and password for the Pi, then click **Download & set up**. The first boot sets up your user. Watch it in the serial console.
+3. Click **Boot**. The Pi's desktop appears in the middle of the window.
+
+## GPIO sandbox (right side)
+- Add **Buttons**, **Switches**, **Knobs**, **LEDs**, **7-segment** displays and a **Probe**. Click ⚙ on a widget to choose its pins; pin numbers are BCM GPIO numbers 0–27.
+- Inputs drive the Pi's pins, and the Pi's outputs light LEDs. The strip at the top shows every pin: blue = input, orange = output.
+- A Button is "active low" by default (it rests at 1 and pressing it gives 0), just like a real button wired with a pull-up. This matches `gpiozero.Button(17)`.
+- A Knob drives several pins as a binary number (the first pin is the lowest bit). There's no analogue input yet.
+- Save layouts by name, export them to your Downloads folder, or drop a `.json` layout onto the canvas.
+
+## Your own code
+Drop a file, folder or `.zip` on **Your code**, then click **Build & run**. Output appears under **Program output**.
+- Python (`main.py` or a single `.py`), C/C++ with a `Makefile` or `CMakeLists.txt`, Rust (`Cargo.toml`), Go (`go.mod`), or a ready-made ARM Linux program.
+- To choose the commands yourself, add a `pi-run.json`: `{"build": "make", "run": "./blink"}`.
+- Code is built and run **inside the virtual Pi only**, never on your computer.
+- **Start on boot** runs the project automatically each time the Pi boots.
+- Try `samples/button-led-py` (Python) or `samples/button-led-c` (C). Press the Button widget and the LED widget lights.
+
+## Licences
+Zero Lab is free software under the GNU GPL v2 or later. It includes QEMU (GPL-2.0) and other components listed in `THIRD-PARTY.md`. The complete source code is in the **Source code (GPL)** folder (on the Mac disk image) or the `sources` folder (in the zip). Raspberry Pi OS is downloaded from raspberrypi.com under its own licences and is not included. Raspberry Pi is a trademark of Raspberry Pi Ltd. Zero Lab is not affiliated with them.

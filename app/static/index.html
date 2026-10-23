@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zero Lab</title>
+<link rel="icon" href="/static/icon.svg">
+<link rel="stylesheet" href="/static/style.css">
+<script>window.ZL_TOKEN = "{{TOKEN}}";</script>
+<script type="module" src="/static/app.js"></script>
+</head>
+<body>
+<header>
+  <img src="/static/icon.svg" alt="" class="logo">
+  <h1>Zero Lab</h1>
+  <span id="status" class="pill">stopped</span>
+  <span id="hostinfo" class="muted"></span>
+  <div class="spacer"></div>
+  <button id="boot" class="primary">▶ Boot</button>
+  <button id="stop">■ Stop</button>
+</header>
+
+<main>
+  <aside id="left">
+    <section>
+      <h2>Disk image</h2>
+      <select id="image" aria-label="Disk image"></select>
+      <details id="addimg">
+        <summary>Add Raspberry Pi OS image…</summary>
+        <label>Image
+          <select id="src-kind"></select>
+        </label>
+        <label id="src-path-row" hidden>Path to .img or .img.xz
+          <input id="src-path" placeholder="/path/to/raspios.img.xz">
+        </label>
+        <label>Name <input id="img-name" value="pi"></label>
+        <label>Pi user <input id="img-user" value="pi" autocomplete="off"></label>
+        <label>Pi password <input id="img-pass" type="password" autocomplete="new-password"></label>
+        <button id="img-add">Download &amp; set up</button>
+        <p class="muted small">Downloads from raspberrypi.com and checks its SHA-256. The first boot sets up your user and takes a few minutes (longer without acceleration).</p>
+      </details>
+      <div id="progress" class="small"></div>
+    </section>
+
+    <section>
+      <h2>VM settings</h2>
+      <label>Memory <select id="ram"><option>256</option><option>512</option><option>768</option><option>1024</option></select> MiB</label>
+      <label>CPUs <select id="cpus"><option>1</option><option>2</option><option>3</option><option>4</option></select></label>
+      <label>Accelerator <select id="accel"></select></label>
+      <label>GPU <select id="gpu"></select></label>
+      <label>Display <select id="display"><option value="app">In this window</option><option value="window">Separate window</option></select></label>
+      <label class="check"><input type="checkbox" id="network"> Internet access</label>
+      <label class="check"><input type="checkbox" id="snapshot"> Throw away changes on stop</label>
+    </section>
+
+    <section>
+      <h2>Your code</h2>
+      <div id="drop" class="drop" tabindex="0">Drop a file, folder or .zip<br><span class="muted small">Python, C/C++ (Makefile/CMake), Rust, Go, or an ARM binary</span></div>
+      <ul id="staged" class="small"></ul>
+      <div class="row">
+        <button id="run" class="primary">Build &amp; run</button>
+        <button id="pstop">Stop</button>
+        <button id="pclear">Clear</button>
+      </div>
+      <label class="check"><input type="checkbox" id="autostart"> Start on boot</label>
+      <p class="muted small">Code is built and run inside the Pi only.</p>
+    </section>
+  </aside>
+
+  <section id="center">
+    <div id="screen"><div id="screen-msg" class="muted">Boot the Pi to see its screen.</div></div>
+    <div class="tabs">
+      <button data-tab="serial" class="on">Serial console</button>
+      <button data-tab="proc">Program output</button>
+    </div>
+    <pre id="serial" class="console"></pre>
+    <pre id="proc" class="console" hidden></pre>
+    <input id="serial-in" class="console-in" placeholder="Type into the serial console, Enter to send">
+  </section>
+
+  <aside id="right">
+    <h2>GPIO sandbox</h2>
+    <div id="pins" class="pins" title="BCM 0–27: I = input, O = output, A = other function"></div>
+    <div id="palette" class="row wrap">
+      <button data-add="button">+ Button</button>
+      <button data-add="switch">+ Switch</button>
+      <button data-add="knob">+ Knob</button>
+      <button data-add="led">+ LED</button>
+      <button data-add="seg7">+ 7-segment</button>
+      <button data-add="probe">+ Probe</button>
+    </div>
+    <div id="canvas" class="canvas"></div>
+    <div class="row wrap">
+      <input id="layout-name" placeholder="layout name" size="10">
+      <button id="layout-save">Save</button>
+      <select id="layout-list" aria-label="Saved layouts"></select>
+      <button id="layout-load">Load</button>
+      <button id="layout-export">Export</button>
+    </div>
+    <p class="muted small">Drag widgets by their title. ⚙ sets pins. Drop a .json layout here to import.</p>
+  </aside>
+</main>
+<div id="toast" role="status"></div>
+</body>
+</html>
