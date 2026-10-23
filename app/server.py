@@ -81,6 +81,7 @@ class App:
         self.busy = None         # name of a running background job
         self.cfg = self.load_cfg()
         self.saved_at = None
+        self.clean_half_made()
         self.downloads = Path.home() / "Downloads"  # the only place the file browser writes on this computer
 
     # ---------- config / state ----------
@@ -241,6 +242,19 @@ class App:
         finally:
             self.busy = None
             self.hub.emit("images", images=self.images())
+
+    def clean_half_made(self):
+        """An image whose setup was interrupted (app quit mid-download or mid first boot) can't be resumed."""
+        for d in (self.data / "images").iterdir():
+            try:
+                done = json.loads((d / "state.json").read_text()).get("provisioned")
+            except (OSError, ValueError):
+                done = False
+            if not done:
+                for f in d.rglob("*"):
+                    if f.is_file():
+                        f.chmod(0o644)
+                shutil.rmtree(d, ignore_errors=True)
 
     def delete_image(self, name):
         if self.vm.proc and self.vm.proc.poll() is None:
