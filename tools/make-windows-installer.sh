@@ -21,19 +21,17 @@ QEMU_REPO=${ZL_QEMU_REPO:-$ZL_QEMU_URL}
 # In a container the checkout usually belongs to another user than root; let git use it anyway.
 export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0='*'
 SYSROOT=/usr/x86_64-w64-mingw32/sys-root/mingw/bin
-V=$(python3 -c 'import plistlib,sys; print(plistlib.load(open(sys.argv[1],"rb"))["CFBundleShortVersionString"])' "$ROOT/mac/Info.plist" 2>/dev/null \
-    || sed -n '/CFBundleShortVersionString/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' "$ROOT/mac/Info.plist")
-NAME="Zero-Lab-$V-windows-x64"
 mkdir -p "$B"
 
 deps() {
-  dnf -y -q install git python3 meson ninja-build bison flex make diffutils findutils tar xz bzip2 perl \
+  # no weak dependencies: podman/qemu-user-static style extras could flush WSL's binfmt_misc on a WSL host
+  dnf -y -q --setopt=install_weak_deps=False install git python3 meson ninja-build bison flex make diffutils findutils tar xz bzip2 perl \
     ImageMagick
   zl_fetch_koji "$ZL_WIN_RPMS" "$B/rpms"
   # exactly these builds (their host-side dependencies come from the image's repos)
   local rpms=() p s
   while read -r p s; do [ -n "$p" ] && rpms+=("$B/rpms/${p##*/}"); done <<< "$ZL_WIN_RPMS"
-  dnf -y -q install "${rpms[@]}"
+  dnf -y -q --setopt=install_weak_deps=False install "${rpms[@]}"
   echo "deps ok: $(x86_64-w64-mingw32-gcc --version | head -1), $(makensis -VERSION)"
 }
 
@@ -76,7 +74,9 @@ qemu() {
 }
 
 installer() {
-  local S="$B/stage" Z="$B/stage/zero-lab" G="$B/sources/Source code (GPL)" P
+  local S="$B/stage" Z="$B/stage/zero-lab" G="$B/sources/Source code (GPL)" P V NAME
+  V=$(python3 -c 'import plistlib,sys; print(plistlib.load(open(sys.argv[1],"rb"))["CFBundleShortVersionString"])' "$ROOT/mac/Info.plist")
+  NAME="Zero-Lab-$V-windows-x64"
   [ -f "$B/qemu/qemu-system-aarch64.exe" ] || { echo "run '$0 qemu' first" >&2; exit 1; }
   [ -f "$ROOT/kernel/kernel8-virtio.img" ] || { echo "kernel/kernel8-virtio.img is missing (kernel/build.sh)" >&2; exit 1; }
   rm -rf "$S" "$B/sources" && mkdir -p "$Z" "$G"

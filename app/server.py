@@ -603,7 +603,7 @@ def main():
         sys.stdout = sys.stderr = open(args.data / "engine.log", "a", buffering=1, encoding="utf-8")
     if not lock:  # e.g. the shortcut double-clicked twice: show the running one instead
         url = (args.data / "engine.url").read_text().strip() if (args.data / "engine.url").exists() else ""
-        print(f"Zero Lab is already running{': ' + url if url else ''}", flush=True)
+        print(f"ZL_ALREADY_RUNNING {url}", flush=True)  # the Mac wrapper reads this line
         if url and args.app_window:
             window.open_window(url, args.data)
         elif url and args.open:
