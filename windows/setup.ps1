@@ -64,8 +64,8 @@ Copy-Item (Join-Path $Here 'zero-lab\icon.ico') $dest -Force
 @"
 @echo off
 title Zero Lab - close this window to stop the Pi
-start "" /b powershell -NoProfile -WindowStyle Hidden -Command "Start-Sleep 4; Start-Process 'http://localhost:$Port/'"
-wsl.exe -d $Distro --cd ~ -- ~/.local/bin/zero-lab --port $Port
+start "" /b powershell -NoProfile -WindowStyle Hidden -Command "`$u='http://127.0.0.1:$Port/'; foreach (`$i in 1..60) { try { `$null = Invoke-WebRequest `$u -UseBasicParsing -TimeoutSec 2; break } catch { Start-Sleep 1 } }; Start-Process `$u"
+wsl.exe -d $Distro -- ~/.local/bin/zero-lab --port $Port
 "@ | Set-Content -Encoding ASCII $launcher
 $shell = New-Object -ComObject WScript.Shell
 foreach ($path in $desktopLinks) {
