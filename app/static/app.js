@@ -29,7 +29,7 @@ function fill(sel, values, current, labels = values) {
 const ACCEL = { hvf: "Fast (Apple HVF)", tcg: "Emulated (TCG), works everywhere" };
 const ACCEL_SHORT = { hvf: "Fast CPU", tcg: "Emulated CPU" };
 const GPU = { venus: "Fast 3D on your GPU (Venus)", virgl: "Compatible 3D on your GPU (virgl)", soft: "Software, no GPU" };
-const GPU_SHORT = { venus: "GPU graphics", virgl: "GPU graphics", soft: "Software graphics" };
+const GPU_SHORT = { venus: "GPU 3D", virgl: "GPU 3D", soft: "Software 3D" };
 // "/Users/ann/Library/..." -> "~/Library/..." so save locations fit on one line
 const tilde = (p) => (state && p.startsWith(state.paths.home + "/") ? "~" + p.slice(state.paths.home.length) : p);
 const provisioned = () => state.images.filter((i) => i.provisioned);
@@ -40,14 +40,14 @@ const activeImage = () => provisioned().find((i) => i.name === state.cfg.image) 
 function renderSummary() {
   const c = state.cfg, img = activeImage();
   const parts = [img ? img.label.replace(/ \(64-bit.*$/, "") : "No disk image", `${c.ram} MB`,
-    `${c.cpus} CPU${c.cpus > 1 ? "s" : ""}`, ACCEL_SHORT[c.accel], GPU_SHORT[c.gpu], "Settings"];
+    `${c.cpus} CPU${c.cpus > 1 ? "s" : ""}`, ACCEL_SHORT[c.accel], GPU_SHORT[c.gpu], "⚙"];
   $("summary").innerHTML = parts.map((p, i) => `<span class="${i === 0 ? "disk" : i === parts.length - 1 ? "gear" : ""}">${esc(p)}</span>`).join("");
   $("summary").setAttribute("aria-label", `Settings: ${parts.slice(0, -1).join(", ")}`);
 }
 function updateControls() {
   const running = status !== "stopped", busy = state.busy;
   const missing = ready ? ready.rows.filter((r) => r.required && r.state !== "ok") : [];
-  const reason = busy ? "Setting up the disk image" : !ready ? "Checking" : missing.length ? "Finish the checklist to boot" : "";
+  const reason = busy ? "Setting up the disk image" : !ready ? "Checking" : missing.length ? "Finish setup to boot" : "";
   $("boot-reason").textContent = running ? "" : reason;
   $("boot").disabled = running || !!busy || !ready?.ready;
   $("boot").setAttribute("aria-describedby", "boot-reason");
@@ -95,16 +95,21 @@ const STAGES = ["download", "decompress", "prepare", "first-boot"];
 const FIRST_BOOT = { ZL_PROVISION_BEGIN: "starting", ZL_USER_READY: "user created", ZL_SSH_ENABLED: "network and SSH set up",
   ZL_AUTOLOGIN: "desktop login set up", ZL_INITRAMFS_BEGIN: "preparing fast disk access (the longest part)",
   ZL_VIRTIO_INITRAMFS_OK: "fast disk access ready", ZL_PROVISIONED: "finishing" };
+const gb = (b) => `${(b / 1e9).toFixed(2)} GB`;
 function showProgress(m) {
   const list = $("progress"); list.hidden = false;
-  const idx = STAGES.indexOf(m.stage);
+  const idx = m.stage === "done" ? STAGES.length : STAGES.indexOf(m.stage);
   list.querySelectorAll("li").forEach((li, i) => {
-    li.className = i < idx || m.stage === "done" ? "done" : i === idx ? "active" : "";
-    li.querySelector(".bar")?.remove();
-    if (i === idx && m.total > 1) li.insertAdjacentHTML("beforeend",
-      `<span class="pct">${Math.round((100 * m.done) / m.total)}%</span><span class="bar"><i style="width:${(100 * m.done) / m.total}%"></i></span>`);
-    else li.querySelector(".pct")?.remove();
-    if (li.dataset.stage === "first-boot" && m.step && FIRST_BOOT[m.step]) li.firstChild.textContent = `First boot: ${FIRST_BOOT[m.step]}`;
+    li.className = i < idx ? "done" : i === idx ? "active" : "";
+    const pct = li.querySelector(".pct"), bar = li.querySelector(".bar");
+    const frac = i === idx && m.total > 1 ? Math.min(1, m.done / m.total) : null;
+    if (frac !== null) {  // update in place: one line per stage, one bar
+      const p = `${Math.round(frac * 100)}%`;
+      pct.textContent = li.dataset.stage === "download" ? `${gb(m.done)} of ${gb(m.total)}, ${p}` : p;
+      bar.hidden = false; bar.firstChild.style.width = `${frac * 100}%`;
+    } else if (i !== idx) { pct.textContent = i < idx ? "done" : ""; bar.hidden = true; }
+    if (li.dataset.stage === "first-boot" && i === idx && m.step && FIRST_BOOT[m.step])
+      li.querySelector(".lbl").textContent = `First boot: ${FIRST_BOOT[m.step]}`;
   });
   ["step-os", "step-user"].forEach((id) => $(id).classList.add("done"));
   $("img-add").disabled = true;
@@ -262,11 +267,21 @@ $("autostart").onchange = act((e) => api("/api/project/autostart", { on: e.targe
 const HEADER = ["3v3", "5v", 2, "5v", 3, "gnd", 4, 14, "gnd", 15, 17, 18, 27, "gnd", 22, 23, "3v3", 24, 10, "gnd",
   9, 25, 11, 8, "gnd", 7, 0, 1, 5, "gnd", 6, 12, 13, "gnd", 19, 16, 26, 20, "gnd", 21];
 const pads = HEADER.map((f, i) => {
+  // Physical layout seen from above: pin 1 bottom-left, odd pins on the bottom row, even pins on top.
+  const pin = i + 1, col = Math.ceil(pin / 2), top = pin % 2 === 0;
+  const kind = typeof f === "number" ? "gpio" : f === "gnd" ? "gnd" : "pwr";
+  const name = kind === "gpio" ? `GPIO${f}` : f.toUpperCase();
   const li = document.createElement("li");
-  li.className = (i % 2 ? "even " : "odd ") + (typeof f === "number" ? "" : "p" + f).replace("pgnd", "gnd");
-  li.dataset.bcm = typeof f === "number" ? f : "";
-  li.title = `Pin ${i + 1}: ${typeof f === "number" ? "GPIO" + f : f.toUpperCase()}`;
-  $("header40").append(li);
+  li.className = `pad ${kind}${pin === 1 ? " one" : ""}`;
+  li.style.gridColumn = col; li.style.gridRow = top ? 2 : 3;
+  li.dataset.bcm = kind === "gpio" ? f : "";
+  li.title = `Pin ${pin}: ${name}`;
+  li.setAttribute("aria-label", `Pin ${pin}, ${name}`);
+  const lbl = document.createElement("li");
+  lbl.className = `plabel ${kind}`; lbl.setAttribute("aria-hidden", "true");
+  lbl.textContent = kind === "gpio" ? f : kind === "gnd" ? "GND" : f.toUpperCase();
+  lbl.style.gridColumn = col; lbl.style.gridRow = top ? 1 : 4;
+  $("header40").append(lbl, li);
   return li;
 });
 function updateHeader() {
@@ -274,7 +289,7 @@ function updateHeader() {
     if (li.dataset.bcm === "") continue;
     const g = +li.dataset.bcm, fn = pins.fn[g], hi = !!pins.lev[g];
     const dir = fn === 0 ? "in" : fn === 1 ? "out" : "alt";
-    li.className = li.className.replace(/\b(in|out|alt|hi)\b/g, "").trim() + ` ${dir}${hi ? " hi" : ""}`;
+    li.classList.remove("in", "out", "alt", "hi"); li.classList.add(dir); if (hi) li.classList.add("hi");
     li.setAttribute("aria-label", `${li.title.split(":")[0]}, GPIO${g}, ${dir === "in" ? "input" : dir === "out" ? "output" : "other function"}, ${hi ? "high" : "low"}`);
   }
 }

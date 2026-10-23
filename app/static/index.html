@@ -17,7 +17,6 @@
     <span class="light" aria-hidden="true"></span><span id="ready-text">Checking</span></button>
   <button id="summary" class="summary" type="button" aria-haspopup="dialog" aria-controls="settings"
           title="Open settings"></button>
-  <div class="grow"></div>
   <p id="boot-reason" class="reason"></p>
   <button id="boot" class="btn go" type="button">Boot</button>
   <button id="stop" class="btn halt" type="button">Stop</button>
@@ -85,10 +84,10 @@
               <button id="setup-cancel" class="btn quiet" type="button" hidden>Cancel</button>
             </div>
             <ol id="progress" class="progress" hidden>
-              <li data-stage="download">Download</li>
-              <li data-stage="decompress">Unpack</li>
-              <li data-stage="prepare">Prepare boot files</li>
-              <li data-stage="first-boot">First boot: create your user</li>
+              <li data-stage="download"><span class="lbl">Download</span><span class="pct"></span><span class="bar" hidden><i></i></span></li>
+              <li data-stage="decompress"><span class="lbl">Unpack</span><span class="pct"></span><span class="bar" hidden><i></i></span></li>
+              <li data-stage="prepare"><span class="lbl">Prepare boot files</span><span class="pct"></span><span class="bar" hidden><i></i></span></li>
+              <li data-stage="first-boot"><span class="lbl">First boot: create your user</span><span class="pct"></span><span class="bar" hidden><i></i></span></li>
             </ol>
             <p id="setup-error" class="error" role="alert" hidden></p>
           </li>
@@ -128,9 +127,19 @@
   <section class="breadboard" aria-labelledby="bb-title">
     <div class="bb-head">
       <h2 id="bb-title">GPIO</h2>
-      <p class="note">Header pins by physical position. Gold means high.</p>
+      <p class="note">The 40-pin header as it sits on the board. Numbers are BCM GPIO numbers.</p>
     </div>
-    <ol id="header40" class="header40" aria-label="40-pin header"></ol>
+    <div class="header-wrap">
+      <ol id="header40" class="header40" aria-label="40-pin header"></ol>
+      <ul class="legend" aria-label="What the pin colours mean">
+        <li><span class="sw in"></span>Input</li>
+        <li><span class="sw out"></span>Output</li>
+        <li><span class="sw hi"></span>High (1)</li>
+        <li><span class="sw pwr"></span>3V3 / 5V power</li>
+        <li><span class="sw gnd"></span>Ground</li>
+        <li><span class="sw one"></span>Pin 1</li>
+      </ul>
+    </div>
     <div class="parts" role="toolbar" aria-label="Add a part">
       <button data-add="button" type="button">Button</button>
       <button data-add="switch" type="button">Switch</button>
