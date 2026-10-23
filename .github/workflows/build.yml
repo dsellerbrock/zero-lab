@@ -38,10 +38,14 @@ jobs:
       - uses: actions/upload-artifact@v4
         with: { name: kernel-source, path: Zero-Lab-*-kernel-source.tar, if-no-files-found: error }
 
-  macos:  # Zero-Lab-<v>-macOS-arm64.dmg (needs the macOS 26 SDK: an Apple Silicon macOS 26 runner)
+  macos:  # Zero-Lab-<v>-macOS-arm64.dmg (needs the macOS 26 SDK: an Apple Silicon macOS 26+ runner)
     needs: [test, kernel]
-    runs-on: macos-26
+    runs-on: macos-latest  # macOS 26 on Apple Silicon since mid-2026; the first step checks
     steps:
+      - name: Runner is Apple Silicon with macOS 26+
+        run: |
+          sw_vers; uname -m; xcrun --show-sdk-version
+          [ "$(uname -m)" = arm64 ] && [ "$(sw_vers -productVersion | cut -d. -f1)" -ge 26 ] && [ "$(xcrun --show-sdk-version | cut -d. -f1)" -ge 26 ]
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with: { name: kernel, path: kernel }
