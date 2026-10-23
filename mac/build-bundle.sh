@@ -7,24 +7,24 @@
 #   mac/build-bundle.sh dmg       the .dmg (includes the GPL source tarballs)
 #   mac/build-bundle.sh all
 #
-# Inputs (env): ZL_QEMU_REPO (default ../qemu-gpio-a6, else github.com/dsellerbrock/qemu-raspi-zero2w), ZL_QEMU_COMMIT (full hash; pinned),
-# ZL_VIRGL_SRC / ZL_EPOXY_SRC (default ../a6-virgl-stack/sources/*), Homebrew glib/pixman/libslirp,
-# MoltenVK (ZL_MOLTENVK, default ../a6-virgl-stack/prefix-venus/lib/libMoltenVK.dylib).
+# Everything is fetched at the versions pinned in tools/pins.sh, so this builds from a clean git clone.
+# Needs: macOS 26+ on Apple Silicon, Xcode command-line tools, Homebrew `meson ninja pkg-config glib pixman libslirp
+# librsvg`, and kernel/kernel8-virtio.img (kernel/build.sh, or the CI kernel job).
+# Overrides (env, optional): ZL_QEMU_REPO (a local clone of the fork), ZL_VIRGL_SRC, ZL_EPOXY_SRC, ZL_MOLTENVK.
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-PROJECTS=$(dirname "$ROOT")
+. "$ROOT/tools/pins.sh"
 B="$ROOT/build/mac"
 DEPS="$B/deps"
+SRC="$B/src"
 export MACOSX_DEPLOYMENT_TARGET=26.0
-JOBS=3
-QEMU_REPO=${ZL_QEMU_REPO:-$PROJECTS/qemu-gpio-a6}
-[ -d "$QEMU_REPO/.git" ] || [ -n "${ZL_QEMU_REPO:-}" ] || QEMU_REPO=https://github.com/dsellerbrock/qemu-raspi-zero2w.git
-ZL_QEMU_COMMIT=${ZL_QEMU_COMMIT:-4e2db446fa6c9077ccfe964194aa2f530cb23fa3}  # qemu-raspi-zero2w 4e2db446 (MCP3008 ADC, I2C displays)
-VIRGL_SRC=${ZL_VIRGL_SRC:-$PROJECTS/a6-virgl-stack/sources/virglrenderer}
-EPOXY_SRC=${ZL_EPOXY_SRC:-$PROJECTS/a6-virgl-stack/sources/libepoxy}
-KHRONOS_INCLUDE=${ZL_KHRONOS_INCLUDE:-$PROJECTS/a6-virgl-stack/prefix/include}  # EGL/GLES/KHR headers (build only)
-MOLTENVK=${ZL_MOLTENVK:-$PROJECTS/a6-virgl-stack/prefix-venus/lib/libMoltenVK.dylib}
+JOBS=${ZL_JOBS:-3}
+QEMU_REPO=${ZL_QEMU_REPO:-$ZL_QEMU_URL}
+VIRGL_SRC=${ZL_VIRGL_SRC:-$SRC/virglrenderer}
+EPOXY_SRC=${ZL_EPOXY_SRC:-$SRC/libepoxy}
+KHRONOS_INCLUDE="$SRC/khronos/include"  # EGL/GLES/KHR headers (build only)
+MOLTENVK=${ZL_MOLTENVK:-$SRC/MoltenVK/libMoltenVK.dylib}
 PCRE2_URL=https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.49/pcre2-10.49.tar.bz2
 PCRE2_SHA=53c156e1ba416a20da8e65395daa132da0d80e76910424caca3fcdae7831d384
 PY_URL=https://github.com/astral-sh/python-build-standalone/releases/download/20251014/cpython-3.12.12+20251014-aarch64-apple-darwin-install_only_stripped.tar.gz
@@ -43,7 +43,29 @@ msetup() { # builddir srcdir args...
   if [ -d "$b/meson-private" ]; then meson setup --reconfigure "$b" "$src" "$@"; else meson setup "$b" "$src" "$@"; fi
 }
 
+die() { echo "Error: $*" >&2; exit 1; }
+
+sources() {  # the pinned inputs that don't come from Homebrew
+  for f in meson ninja pkg-config glib pixman libslirp librsvg; do
+    brew list --versions "$f" >/dev/null 2>&1 || die "missing Homebrew package $f: brew install meson ninja pkg-config glib pixman libslirp librsvg"
+  done
+  mkdir -p "$SRC"
+  [ -n "${ZL_VIRGL_SRC:-}" ] || zl_checkout "$ZL_VIRGL_URL" "$ZL_VIRGL_COMMIT" "$VIRGL_SRC"
+  [ -n "${ZL_EPOXY_SRC:-}" ] || zl_checkout "$ZL_EPOXY_URL" "$ZL_EPOXY_COMMIT" "$EPOXY_SRC"
+  if [ ! -f "$KHRONOS_INCLUDE/KHR/khrplatform.h" ]; then
+    rm -rf "$SRC/khronos" && mkdir -p "$SRC/khronos/egl" "$SRC/khronos/gl" "$KHRONOS_INCLUDE"
+    curl -fsL --retry 3 "$ZL_EGL_REGISTRY" | tar -xz -C "$SRC/khronos/egl" --strip-components 1
+    curl -fsL --retry 3 "$ZL_GL_REGISTRY" | tar -xz -C "$SRC/khronos/gl" --strip-components 1
+    cp -R "$SRC/khronos/egl/api/EGL" "$SRC/khronos/egl/api/KHR" "$SRC/khronos/gl/api/GLES2" "$SRC/khronos/gl/api/GLES3" "$KHRONOS_INCLUDE/"
+  fi
+  if [ -z "${ZL_MOLTENVK:-}" ] && [ ! -f "$MOLTENVK" ]; then
+    fetch "$ZL_MOLTENVK_URL" "$ZL_MOLTENVK_SHA" "$SRC/MoltenVK-macos.tar"
+    mkdir -p "$SRC/MoltenVK" && tar -xOf "$SRC/MoltenVK-macos.tar" MoltenVK/MoltenVK/dynamic/dylib/macOS/libMoltenVK.dylib > "$MOLTENVK"
+  fi
+}
+
 deps() {
+  sources
   # virglrenderer's generators need PyYAML
   [ -x "$B/venv/bin/python3" ] || { python3 -m venv "$B/venv" && "$B/venv/bin/pip" -q install pyyaml==6.0.3; }
   export PATH="$B/venv/bin:$PATH"
@@ -86,6 +108,8 @@ qemu() {
 
 app() {
   local R="$APP/Contents/Resources" Q="$APP/Contents/Resources/qemu"
+  sources
+  [ -f "$ROOT/kernel/kernel8-virtio.img" ] || die "kernel/kernel8-virtio.img is missing: build it with kernel/build.sh (needs Docker) or take it from the CI kernel job"
   rm -rf "$APP"
   mkdir -p "$APP/Contents/MacOS" "$Q/bin" "$Q/lib" "$Q/libexec" "$Q/share"
   cp "$ROOT/mac/Info.plist" "$APP/Contents/"

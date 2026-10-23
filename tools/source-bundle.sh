@@ -1,17 +1,14 @@
 #!/bin/bash
 # Put the complete corresponding source for everything Zero Lab ships into DIR (GPL/LGPL).
 #   tools/source-bundle.sh DIR
-# Env: ZL_QEMU_REPO, ZL_QEMU_COMMIT (QEMU fork), ZL_VIRGL_SRC, ZL_EPOXY_SRC (git checkouts).
+# Versions come from tools/pins.sh (and, for the macOS LGPL libraries, from what Homebrew installed),
+# so this works from a clean clone. Env (optional): ZL_QEMU_REPO, a local clone of the fork.
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-PROJECTS=$(dirname "$ROOT")
+. "$ROOT/tools/pins.sh"
 OUT=$(mkdir -p "$1" && cd "$1" && pwd)
 CACHE="$ROOT/build/sources"; mkdir -p "$CACHE"
-QEMU_REPO=${ZL_QEMU_REPO:-$PROJECTS/qemu-gpio-a6}
-[ -d "$QEMU_REPO/.git" ] || [ -n "${ZL_QEMU_REPO:-}" ] || QEMU_REPO=https://github.com/dsellerbrock/qemu-raspi-zero2w.git
-ZL_QEMU_COMMIT=${ZL_QEMU_COMMIT:-4e2db446fa6c9077ccfe964194aa2f530cb23fa3}  # qemu-raspi-zero2w 4e2db446 (MCP3008 ADC, I2C displays)
-VIRGL_SRC=${ZL_VIRGL_SRC:-$PROJECTS/a6-virgl-stack/sources/virglrenderer}
-EPOXY_SRC=${ZL_EPOXY_SRC:-$PROJECTS/a6-virgl-stack/sources/libepoxy}
+QEMU_REPO=${ZL_QEMU_REPO:-$ZL_QEMU_URL}
 
 short=${ZL_QEMU_COMMIT:0:12}
 q="$CACHE/qemu-zero-lab-$short.tar.xz"
@@ -27,21 +24,28 @@ if [ ! -f "$q" ]; then
   tar -C "$tmp" -cf - "qemu-zero-lab-$short" | xz -T3 -9 > "$q"; rm -rf "$tmp"
 fi
 cp "$q" "$OUT/"
-for pair in "virglrenderer:$VIRGL_SRC" "libepoxy:$EPOXY_SRC"; do
-  name=${pair%%:*} src=${pair#*:} rev=$(git -C "$src" rev-parse --short=12 HEAD)
-  git -C "$src" archive --prefix="$name-$rev/" HEAD | xz -T3 -9 > "$OUT/$name-$rev.tar.xz"
+for pin in "virglrenderer $ZL_VIRGL_URL $ZL_VIRGL_COMMIT" "libepoxy $ZL_EPOXY_URL $ZL_EPOXY_COMMIT"; do
+  set -- $pin; src="$CACHE/$1"; zl_checkout "$2" "$3" "$src"
+  git -C "$src" archive --prefix="$1-${3:0:12}/" HEAD | xz -T3 -9 > "$OUT/$1-${3:0:12}.tar.xz"
 done
 git -C "$ROOT" archive --prefix=zero-lab/ HEAD | xz -9 > "$OUT/zero-lab-$(git -C "$ROOT" rev-parse --short=12 HEAD).tar.xz"
-# LGPL libraries linked into the macOS QEMU (exact upstream releases Homebrew built from)
-while read -r url sha; do
-  f="$CACHE/$(basename "$url")"
-  [ -f "$f" ] || curl -fsL --retry 3 -o "$f" "$url"
-  echo "$sha  $f" | shasum -a 256 -c - >/dev/null
-  cp "$f" "$OUT/"
-done <<'LIST'
-https://download.gnome.org/sources/glib/2.90/glib-2.90.1.tar.xz 93c941aa17d5eb1d53fe838365f29a8b4e539c222a256d974ec8f30fc413e396
-https://ftpmirror.gnu.org/gettext/gettext-1.0.tar.gz 85d99b79c981a404874c02e0342176cf75c7698e2b51fe41031cf6526d974f1a
-LIST
+# LGPL libraries the macOS app bundles from Homebrew: the source of exactly the installed version
+if command -v brew >/dev/null; then
+  gv=$(brew list --versions glib | cut -d" " -f2); tv=$(brew list --versions gettext | cut -d" " -f2)
+  g="https://download.gnome.org/sources/glib/${gv%.*}/glib-$gv.tar.xz"
+  t="https://ftpmirror.gnu.org/gettext/gettext-$tv.tar.gz"
+  gsha=$(curl -fsL "https://download.gnome.org/sources/glib/${gv%.*}/glib-$gv.sha256sum" | grep "glib-$gv.tar.xz" | cut -d" " -f1)
+  tsha=$(brew info --json=v2 gettext | python3 -c "import json,sys; f=json.load(sys.stdin)['formulae'][0]; print(f['urls']['stable']['checksum'] if f['versions']['stable']=='$tv' else '')")
+  for pair in "$g $gsha" "$t $tsha"; do
+    set -- $pair; f="$CACHE/$(basename "$1")"
+    [ -n "${2:-}" ] || { echo "no checksum for $1" >&2; exit 1; }
+    [ -f "$f" ] || curl -fsL --retry 3 -o "$f" "$1"
+    echo "$2  $f" | shasum -a 256 -c - >/dev/null
+    cp "$f" "$OUT/"
+  done
+  { echo "Built with (Homebrew):"; brew list --versions glib gettext pixman libslirp; } > "$OUT/VERSIONS.txt"
+fi
+{ echo "Pinned (tools/pins.sh): QEMU fork $ZL_QEMU_COMMIT, virglrenderer $ZL_VIRGL_COMMIT, libepoxy $ZL_EPOXY_COMMIT, MoltenVK ${ZL_MOLTENVK_URL##*/download/}"; } >> "$OUT/VERSIONS.txt"
 cp "$ROOT/LICENSE" "$ROOT/THIRD-PARTY.md" "$OUT/"
 cat > "$OUT/README.txt" <<TXT
 Complete corresponding source for Zero Lab binaries.

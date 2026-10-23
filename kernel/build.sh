@@ -17,7 +17,7 @@ while read -r sum f; do
 done <<< "$SRC"
 [ "${1:-}" = source ] && exit 0
 
-docker run --rm -v "$K:/k" debian:trixie bash -euc '
+docker run --rm -e JOBS="${ZL_JOBS:-3}" -v "$K:/k" debian:trixie bash -euc '
   export DEBIAN_FRONTEND=noninteractive
   apt-get update -qq
   cross=; [ "$(uname -m)" = aarch64 ] || cross=gcc-aarch64-linux-gnu
@@ -27,6 +27,6 @@ docker run --rm -v "$K:/k" debian:trixie bash -euc '
   cd /tmp && dpkg-source --no-check -x /k/src/linux_6.18.50-1+rpt1.dsc linux >/dev/null && cd linux
   cp /k/config .config
   make ARCH=arm64 olddefconfig >/dev/null
-  make ARCH=arm64 -j3 Image 2>&1 | tail -2
+  make ARCH=arm64 -j"$JOBS" Image 2>&1 | tail -2
   cp arch/arm64/boot/Image /k/kernel8-virtio.img
   strings /k/kernel8-virtio.img | grep -m1 "Linux version"'
