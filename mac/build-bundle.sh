@@ -153,7 +153,7 @@ dmg() {
   rm -rf "$S" && mkdir -p "$S/Source code (GPL)"
   cp -R "$APP" "$S/"
   ln -s /Applications "$S/Applications"
-  cp "$ROOT/docs/FRIENDS.md" "$S/Read me first.md"
+  cp "$ROOT/docs/GETTING-STARTED.md" "$S/Read me first.md"
   "$ROOT/tools/source-bundle.sh" "$S/Source code (GPL)"
   rm -f "$B/Zero-Lab-$V-macOS-arm64.dmg"
   hdiutil create -quiet -volname "Zero Lab" -srcfolder "$S" -fs APFS -format ULFO "$B/Zero-Lab-$V-macOS-arm64.dmg"

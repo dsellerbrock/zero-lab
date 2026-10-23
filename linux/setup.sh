@@ -11,7 +11,7 @@ DEST=${ZL_PREFIX:-$HOME/.local/share/zero-lab}
 WORK=${ZL_WORK:-$HOME/.cache/zero-lab-build}
 JOBS=${ZL_JOBS:-$(nproc)}
 IS_WSL=0; grep -qi microsoft /proc/version 2>/dev/null && IS_WSL=1
-# Build steps log to a file; on failure show its tail so friends can send it to you.
+# Build steps log to a file; on failure show its tail, so it can be reported.
 logged() { "$@" >> "$WORK/build.log" 2>&1 || { tail -n 40 "$WORK/build.log"; die "build step failed: $* (full log: $WORK/build.log)"; }; }
 say() { printf '\033[1;35m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31mError:\033[0m %s\n' "$*" >&2; exit 1; }

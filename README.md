@@ -1,6 +1,6 @@
 # Zero Lab
 
-A friendly app around an emulated **Raspberry Pi Zero 2 W**. Boot Raspberry Pi OS, use its desktop, wire virtual buttons, switches, knobs, LEDs and 7-segment displays to its GPIO pins, move files in and out, and drop in your own code to build and run on the Pi.
+A desktop app around an emulated **Raspberry Pi Zero 2 W**. Boot Raspberry Pi OS, use its desktop, wire virtual buttons, switches, knobs, LEDs and 7-segment displays to its GPIO pins, move files in and out, and drop in your own code to build and run on the Pi.
 
 Zero Lab runs on **[qemu-raspi-zero2w](https://github.com/dsellerbrock/qemu-raspi-zero2w)**, our QEMU fork with:
 - external GPIO with edge interrupts for the BCM2835;
@@ -17,7 +17,7 @@ Zero Lab runs on **[qemu-raspi-zero2w](https://github.com/dsellerbrock/qemu-rasp
 - **Linux** (x86_64, Ubuntu 22.04 or newer, or the same age): `Zero-Lab-<version>-linux-x86_64.AppImage`. Mark it executable and double-click it; nothing to compile, no root. The CPU is emulated (TCG); graphics are software, or virgl/Venus where a GPU render node exists. Other CPUs or older distributions: build from source with `linux/setup.sh` ([docs/BUILDING.md](docs/BUILDING.md)).
 - **Windows 10/11 x64**: `Zero-Lab-<version>-windows-x64-setup.exe`. It's a per-user install wizard: no admin, no WSL. It adds Start-menu and desktop shortcuts, and its uninstaller keeps your Pi data. Zero Lab opens in its own maximised window (Edge's app mode, which is part of Windows), and closing that window shuts the Pi down and ends every Zero Lab process. QEMU is cross-built with mingw-w64, and Python comes with it. The CPU is emulated (TCG) and graphics are software, as they'd be under WSL. The GPL sources are in `…-windows-x64-sources.zip`.
 
-Downloads: https://pisim.ellerbrock.dev. Instructions for friends: [docs/FRIENDS.md](docs/FRIENDS.md).
+Downloads: https://pisim.ellerbrock.dev. Getting started: [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md).
 
 ## What's in the window
 - **First run.** A checklist shows what the Pi needs (emulator, speed-up, graphics, Raspberry Pi OS, user, disk space), and three steps download and set up the official image. No Pi firmware is needed. Zero Lab ships the Pi OS kernel rebuilt with virtio built in (screen and fast disk; recipe in [kernel/](kernel)), and the device tree comes from the image.
