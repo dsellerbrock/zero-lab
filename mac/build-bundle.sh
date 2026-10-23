@@ -86,10 +86,8 @@ deps() {
 
 qemu() {
   if [ -d "$QEMU_REPO/.git" ]; then ZL_QEMU_COMMIT=$(git -C "$QEMU_REPO" rev-parse --verify "$ZL_QEMU_COMMIT^{commit}"); fi
-  # A clean clone at the pinned commit: never the live working tree another session is editing.
-  if [ ! -d "$B/qemu-src/.git" ]; then git clone -q --no-checkout "$QEMU_REPO" "$B/qemu-src"; fi
-  git -C "$B/qemu-src" fetch -q "$QEMU_REPO" "$ZL_QEMU_COMMIT"
-  git -C "$B/qemu-src" checkout -q -f "$ZL_QEMU_COMMIT"
+  # A clean checkout at the pinned commit (shallow), never the live working tree another session is editing.
+  zl_checkout "$QEMU_REPO" "$ZL_QEMU_COMMIT" "$B/qemu-src"
   git -C "$B/qemu-src" clean -qfdx
   mkdir -p "$B/qemu-build"
   (cd "$B/qemu-build" && "$B/qemu-src/configure" --prefix="$B/qemu-install" \
