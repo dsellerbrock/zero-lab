@@ -4,7 +4,7 @@
 exec >/dev/console 2>&1
 # Markers go through the kernel log: the Zero 2 W's Bluetooth claims the serial UART, which swallows plain
 # writes to /dev/ttyAMA1, but kernel messages always reach the console (raspi-zero2w network-probe.sh does this).
-mark() { printf '<4>%s\n' "$*" > /dev/kmsg 2>/dev/null || echo "$*"; }
+mark() { printf '<2>%s\n' "$*" > /dev/kmsg 2>/dev/null; echo "$*"; }  # <2>: Pi OS sets kernel.printk = 3 4 1 3
 mark ZL_SETUP_BEGIN
 # The Pi has no clock battery: take the host's time so TLS, apt and make work.
 date -u -s "@$(tr -d '\000' < /proc/device-tree/chosen/zl-epoch)" >/dev/null 2>&1 || true
@@ -50,7 +50,7 @@ systemd-run --quiet --no-block --unit=zl-ready-watch.service /bin/sh -c '
   i=0
   while [ $i -lt 900 ]; do
     if pgrep -x wf-panel-pi >/dev/null && pgrep -x pcmanfm >/dev/null; then
-      printf "<4>ZL_DESKTOP_READY\\n" > /dev/kmsg; exit 0
+      printf "<2>ZL_DESKTOP_READY\\n" > /dev/kmsg; exit 0
     fi
     i=$((i + 1)); sleep 1
   done'

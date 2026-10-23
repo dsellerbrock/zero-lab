@@ -5,7 +5,7 @@
 exec >/dev/console 2>&1
 # Markers go through the kernel log: the Zero 2 W's Bluetooth claims the serial UART, which swallows plain
 # writes to /dev/ttyAMA1, but kernel messages always reach the console (raspi-zero2w network-probe.sh does this).
-mark() { printf '<4>%s\n' "$*" > /dev/kmsg 2>/dev/null || echo "$*"; }
+mark() { printf '<2>%s\n' "$*" > /dev/kmsg 2>/dev/null; echo "$*"; }  # <2>: Pi OS sets kernel.printk = 3 4 1 3
 mark ZL_PROVISION_BEGIN
 date -u -s "@$(tr -d '\000' < /proc/device-tree/chosen/zl-epoch)" >/dev/null 2>&1 || true
 systemctl start --no-block multi-user.target
