@@ -63,7 +63,7 @@ class Guest:
         return [openssh("ssh"), "-i", str(self.key), "-p", str(self.port),
                 # Loopback forward to our own VM, and the host key changes on every reprovision.
                 "-o", "StrictHostKeyChecking=no", "-o", f"UserKnownHostsFile={os.devnull}",
-                "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "-o", "LogLevel=ERROR",
+                "-o", "BatchMode=yes", "-o", "ConnectTimeout=20", "-o", "LogLevel=ERROR",
                 f"{self.user}@127.0.0.1", command]
 
     def sh(self, command, stdin=b"", timeout=60):
