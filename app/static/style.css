@@ -67,7 +67,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--board); width: 16p
        background: var(--paper); border-bottom: 1px solid var(--line); }
 .brand { display: flex; align-items: center; gap: var(--s2); }
 .brand img { width: 28px; height: 28px; }
-.brand h1 { font-size: 17px; letter-spacing: .01em; }
+.brand h1 { font-size: 17px; letter-spacing: .01em; white-space: nowrap; }
 .status { display: flex; align-items: center; gap: var(--s2); margin: 0; min-width: 9em; color: var(--ink-2); }
 .lamp { width: 10px; height: 10px; border-radius: 50%; background: var(--hole); box-shadow: inset 0 0 0 1px rgb(0 0 0 / .2); }
 .status.booting .lamp, .status.stopping .lamp, .status.setup .lamp { background: var(--pad); }
@@ -93,7 +93,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--board); width: 16p
 
 /* first-run setup sits on the dark screen like a boot menu, but readable */
 .setup { width: min(760px, 100%); color: #e6efe9; padding: var(--s4) var(--s5); align-self: start; }
-.setup h2 { font-size: 22px; }
+.setup h2 { font-size: 22px; margin-bottom: var(--s3); }
 .lede { color: #b4c4ba; margin: var(--s1) 0 var(--s4); max-width: 70ch; }
 .steps { list-style: none; margin: 0; padding: 0; counter-reset: step; display: grid; gap: var(--s4); }
 .step { counter-increment: step; position: relative; padding-left: 44px; display: grid; gap: var(--s2); }
@@ -233,3 +233,45 @@ canvas.probe { background: var(--console); border-radius: var(--r-s); }
   .setup { padding: var(--s3); }
   .step { padding-left: 36px; }
 }
+
+/* ---------- readiness stop light ---------- */
+.ready-btn { font: inherit; display: inline-flex; align-items: center; gap: var(--s2); min-height: 32px; padding: var(--s1) var(--s3);
+  background: var(--paper); color: var(--ink); border: 1px solid var(--line); border-radius: var(--r-s); cursor: pointer; white-space: nowrap; }
+.light { width: 12px; height: 12px; border-radius: 50%; background: var(--hole); flex: none; }
+.light.ok { background: #2f9e55; } .light.warn { background: #e0a21b; } .light.missing { background: var(--signal); }
+.light.waiting { background: transparent; box-shadow: inset 0 0 0 2px var(--hole); }
+.checklist { list-style: none; margin: 0; padding: var(--s3) var(--s4); display: grid; gap: var(--s3); overflow: auto; align-content: start; }
+.checklist li { display: grid; grid-template-columns: 20px 1fr; gap: 2px var(--s2); align-items: start; }
+.checklist .light { margin-top: 4px; display: grid; place-items: center; font-size: 9px; font-weight: 700; color: #fff; width: 16px; height: 16px; }
+.checklist .light.ok::after { content: "✓"; } .checklist .light.warn::after { content: "!"; color: #3a2a00; }
+.checklist .light.missing::after { content: "✕"; }
+.checklist .what { display: flex; gap: var(--s2); align-items: baseline; flex-wrap: wrap; }
+.checklist .state { font-size: 12px; color: var(--ink-2); }
+.checklist .detail { grid-column: 2; color: var(--ink-2); font-size: 13px; margin: 0; }
+.checklist .fixes { grid-column: 2; display: flex; gap: var(--s2); margin-top: var(--s1); }
+.ready-summary { margin: var(--s3) var(--s4) 0; font-weight: 700; }
+/* compact two-column version on the dark first-run screen */
+.needs { margin-bottom: var(--s4); padding: var(--s3); border: 1px solid #3c4943; border-radius: var(--r-s); display: grid; gap: var(--s2); }
+.needs h3 { font-size: 15px; }
+.checklist.compact { padding: 0; grid-template-columns: 1fr 1fr; gap: var(--s2) var(--s4); }
+.checklist.compact li { grid-template-columns: 16px 1fr auto; align-items: center; }
+.checklist.compact .light { margin: 0; }
+.checklist.compact .what { color: #e6efe9; }
+.checklist.compact .state { color: #9fb2a6; }
+.checklist.compact .fixes { grid-column: 3; margin: 0; }
+.checklist.compact li:has(.fixes) { grid-column: 1 / -1; }
+.checklist.compact .detail { display: none; }
+.setup .link { color: #8fc1ff; }
+.setup .needs .btn { min-height: 26px; padding: 0 var(--s2); font-size: 12px; }
+
+/* ---------- info tips ---------- */
+.label-row { display: flex; align-items: center; gap: var(--s1); }
+.tip { font: italic 700 11px/1 Georgia, serif; width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--ink-2);
+  color: var(--ink-2); background: transparent; cursor: help; display: inline-grid; place-items: center; padding: 0; flex: none; }
+.tip[aria-expanded=true] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.check .tip { margin-left: auto; }
+#tipbox { position: fixed; z-index: 10; max-width: 320px; background: #20262a; color: #f2f5f3; border-radius: var(--r-s);
+  padding: var(--s2) var(--s3); font-size: 13px; line-height: 1.45; box-shadow: 0 4px 16px rgb(0 0 0 / .25); }
+#tipbox p { margin: 0; } #tipbox p + p { margin-top: var(--s2); }
+#tipbox b { color: #f5d27a; }
+@media (max-width: 700px) { .checklist.compact { grid-template-columns: 1fr; } }

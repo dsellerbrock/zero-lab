@@ -18,6 +18,7 @@ import gpio  # noqa: E402
 import guest  # noqa: E402
 import image  # noqa: E402
 import server  # noqa: E402
+import readiness  # noqa: E402
 import vm  # noqa: E402
 
 
@@ -188,6 +189,51 @@ class VmTest(unittest.TestCase):
         self.assertIn("virtio-gpu-device", p)
 
 
+class ReadinessTest(unittest.TestCase):
+    HOST_FAST = {"accels": ["hvf", "tcg"], "gpus": ["venus", "soft"]}
+    HOST_SLOW = {"accels": ["tcg"], "gpus": ["soft"]}
+    IMG = {"name": "desktop", "label": "Raspberry Pi OS with desktop", "provisioned": True, "boot_files": True, "user": "pi"}
+
+    def rows(self, r):
+        return {x["id"]: x for x in r["rows"]}
+
+    def test_nothing_yet(self):
+        r = readiness.check(self.HOST_FAST, (True, "QEMU 11.1"), [], None, None, 100 * readiness.GB, image.CATALOG)
+        rows = self.rows(r)
+        self.assertFalse(r["ready"])
+        self.assertEqual(rows["image"]["state"], "missing")
+        self.assertEqual(rows["image"]["fix"]["action"], "download")
+        self.assertEqual(rows["kernel"]["state"], "waiting")
+        self.assertIn("Nothing to download", rows["kernel"]["detail"])
+        self.assertEqual(rows["user"]["state"], "waiting")
+
+    def test_all_green(self):
+        r = readiness.check(self.HOST_FAST, (True, "QEMU 11.1"), [self.IMG], "desktop", None, 100 * readiness.GB, image.CATALOG)
+        self.assertTrue(r["ready"])
+        self.assertEqual(r["level"], "ok")
+
+    def test_slow_host_still_ready(self):
+        r = readiness.check(self.HOST_SLOW, (True, "QEMU 11.1"), [self.IMG], "desktop", None, 100 * readiness.GB, image.CATALOG)
+        self.assertTrue(r["ready"])
+        self.assertEqual(r["level"], "warn")
+        self.assertEqual(self.rows(r)["accel"]["state"], "warn")
+
+    def test_blockers(self):
+        broken = readiness.check(self.HOST_FAST, (False, "no binary"), [self.IMG], "desktop", None, 100 * readiness.GB, image.CATALOG)
+        self.assertFalse(broken["ready"])
+        full = readiness.check(self.HOST_FAST, (True, "QEMU"), [self.IMG], "desktop", None, 1 * readiness.GB, image.CATALOG)
+        self.assertEqual(self.rows(full)["disk"]["state"], "missing")
+        self.assertFalse(full["ready"])
+        busy = readiness.check(self.HOST_FAST, (True, "QEMU"), [], None, "setting up desktop", 100 * readiness.GB, image.CATALOG)
+        self.assertEqual(self.rows(busy)["image"]["state"], "waiting")
+        self.assertFalse(busy["ready"])
+
+    def test_qemu_probe_reports_failure(self):
+        ok, text = readiness.qemu_probe(lambda: ("/nonexistent/qemu", None, None), lambda d: dict(os.environ))
+        self.assertFalse(ok)
+        self.assertTrue(text)
+
+
 class ServerTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -233,6 +279,14 @@ class ServerTest(unittest.TestCase):
         finally:
             self.app.vm.proc = None
         self.assertEqual(self.req("POST", "/api/config", token="tok", body={"ram": 256})[0], 200)
+
+    def test_readiness_endpoint(self):
+        code, body = self.req("GET", "/api/readiness", token="tok")
+        self.assertEqual(code, 200)
+        r = json.loads(body)
+        self.assertEqual({x["id"] for x in r["rows"]}, {"qemu", "accel", "gpu", "image", "kernel", "user", "disk"})
+        self.assertFalse(r["ready"])  # empty data dir: no image
+        self.assertEqual(self.req("GET", "/api/readiness")[0], 403)
 
     def test_reveal_only_known_places(self):
         self.assertEqual(self.req("POST", "/api/reveal", token="tok", body={"what": "/etc/passwd"})[0], 400)

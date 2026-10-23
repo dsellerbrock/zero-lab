@@ -4,7 +4,7 @@ import { breadboard } from "./widgets.js";
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const T = window.ZL_TOKEN;
-let state = null, status = "stopped", wsPort = null, rfb = null, setupOpen = false, screenUp = false;
+let state = null, ready = null, status = "stopped", wsPort = null, rfb = null, setupOpen = false, screenUp = false;
 let pins = { fn: Array(28).fill(0), lev: Array(28).fill(0), seen: false };
 
 // ---------- API ----------
@@ -25,10 +25,10 @@ function fill(sel, values, current, labels = values) {
   sel.innerHTML = values.map((v, i) => `<option value="${esc(v)}">${esc(labels[i])}</option>`).join("");
   if (values.includes(current)) sel.value = current;
 }
-const ACCEL = { hvf: "Apple Hypervisor (fast)", tcg: "Emulated CPU (works everywhere)" };
-const ACCEL_SHORT = { hvf: "HVF", tcg: "Emulated CPU" };
-const GPU = { venus: "Venus: Vulkan on your GPU", virgl: "virgl: OpenGL on your GPU", soft: "Software" };
-const GPU_SHORT = { venus: "Venus", virgl: "virgl", soft: "Software graphics" };
+const ACCEL = { hvf: "Fast (Apple HVF)", tcg: "Emulated (TCG), works everywhere" };
+const ACCEL_SHORT = { hvf: "Fast CPU", tcg: "Emulated CPU" };
+const GPU = { venus: "Fast 3D on your GPU (Venus)", virgl: "Compatible 3D on your GPU (virgl)", soft: "Software, no GPU" };
+const GPU_SHORT = { venus: "GPU graphics", virgl: "GPU graphics", soft: "Software graphics" };
 // "/Users/ann/Library/..." -> "~/Library/..." so save locations fit on one line
 const tilde = (p) => (state && p.startsWith(state.paths.home + "/") ? "~" + p.slice(state.paths.home.length) : p);
 const provisioned = () => state.images.filter((i) => i.provisioned);
@@ -44,10 +44,11 @@ function renderSummary() {
   $("summary").setAttribute("aria-label", `Settings: ${parts.slice(0, -1).join(", ")}`);
 }
 function updateControls() {
-  const running = status !== "stopped", ready = !!activeImage(), busy = state.busy;
-  const reason = busy ? "Setting up the disk image" : !ready ? "Set up a disk image to boot" : "";
+  const running = status !== "stopped", busy = state.busy;
+  const missing = ready ? ready.rows.filter((r) => r.required && r.state !== "ok") : [];
+  const reason = busy ? "Setting up the disk image" : !ready ? "Checking" : missing.length ? "Finish the checklist to boot" : "";
   $("boot-reason").textContent = running ? "" : reason;
-  $("boot").disabled = running || !!busy || !ready;
+  $("boot").disabled = running || !!busy || !ready?.ready;
   $("boot").setAttribute("aria-describedby", "boot-reason");
   $("stop").disabled = !running;
   $("settings-fields").disabled = running || !!busy;
@@ -186,6 +187,7 @@ function onEvent(m) {
       showProgress(m); setupOpen = false; toast("Disk image ready. Press Boot."); refresh();
     } else showProgress(m);
   } else if (m.type === "images") refresh();
+  if (m.type === "provision" && ["first-boot", "error"].includes(m.stage)) api("/api/readiness").then((r) => { ready = r; renderReadiness(); updateControls(); });
 }
 new EventSource(`/api/events?t=${encodeURIComponent(T)}`).onmessage = (e) => onEvent(JSON.parse(e.data));
 
@@ -307,5 +309,88 @@ function render() {
   fill(ll, names.length ? names : [""], ll.value, names.length ? names : ["No saved layouts yet"]);
   $("layout-load").disabled = $("layout-export").disabled = !names.length;
 }
-async function refresh() { state = await api("/api/state"); status = state.status; render(); }
-refresh().catch((e) => toast(e.message));
+async function refresh() {
+  [state, ready] = await Promise.all([api("/api/state"), api("/api/readiness")]);
+  status = state.status; render(); renderReadiness();
+}
+
+// ---------- readiness stop light ----------
+const readyDlg = $("ready-dlg");
+$("ready-btn").onclick = () => readyDlg.showModal();
+document.querySelectorAll("[data-open-ready]").forEach((b) => (b.onclick = () => readyDlg.showModal()));
+const STATE_WORD = { ok: "Done", warn: "Optional, works slower", missing: "Needed before Boot", waiting: "Happens later" };
+function renderReadiness() {
+  if (!ready) return;
+  const todo = ready.rows.filter((r) => r.required && r.state !== "ok");
+  $("ready-btn").querySelector(".light").className = "light " + ready.level;
+  $("ready-text").textContent = ready.ready ? (ready.level === "ok" ? "Ready to boot" : "Ready, slower") : `${todo.length} to set up`;
+  $("ready-btn").setAttribute("aria-label", `Readiness checklist: ${$("ready-text").textContent}`);
+  $("ready-summary").textContent = ready.ready
+    ? (ready.level === "ok" ? "Everything is ready. Press Boot." : "Ready to boot. Amber items only make it slower.")
+    : `Before the first boot: ${todo.map((r) => r.title).join(", ")}.`;
+  for (const [id, compact] of [["ready-inline", true], ["ready-full", false]]) {
+    $(id).innerHTML = ready.rows.map((r) => {
+      const fixes = [r.fix, r.fix?.alt].filter(Boolean).map((f) => `<button type="button" class="btn" data-fix="${esc(f.action)}">${esc(f.label)}</button>`).join("");
+      return `<li><span class="light ${esc(r.state)}" role="img" aria-label="${esc(STATE_WORD[r.state])}"></span>
+        <span class="what"><strong>${esc(r.title)}</strong><span class="state">${esc(r.short)}</span></span>
+        <p class="detail">${esc(r.detail)}</p>${fixes ? `<span class="fixes">${fixes}</span>` : ""}</li>`;
+    }).join("");
+  }
+}
+document.addEventListener("click", act(async (e) => {
+  const b = e.target.closest("[data-fix]"); if (!b) return;
+  const kind = b.dataset.fix;
+  if (kind === "reveal") return api("/api/reveal", { what: "data" });
+  readyDlg.close(); setupOpen = true; render();
+  const radio = $("os-choices").querySelector(`input[value="${kind === "choose" ? "local" : "desktop"}"]`);
+  if (radio) { radio.checked = true; $("os-choices").onchange(); }
+  (kind === "choose" ? $("src-path") : $("img-pass").value ? $("img-add") : $("img-pass")).focus();
+}));
+
+// ---------- info tips: hover, focus or click (touch); Escape closes ----------
+const TIPS = {
+  ram: "<p>How much memory the Pi gets. A real Zero 2 W has 512 MB. More makes the desktop smoother but takes it from your computer.</p>",
+  cpus: "<p>The Zero 2 W has 4 cores. Fewer leaves more of your computer free for other things.</p>",
+  accel: "<p><b>Fast (Apple HVF)</b>: Apple's built-in hypervisor runs the Pi's CPU directly on your Mac's cores. Fastest. Apple Silicon only.</p><p><b>Emulated (TCG)</b>: QEMU translates every Pi instruction in software. Works on any computer, several times slower.</p><p><b>KVM</b> is Linux's hypervisor; it can't run this Pi model yet, so Linux and Windows use TCG.</p>",
+  gpu: "<p><b>Venus</b>: passes the Pi's Vulkan graphics to your computer's GPU (through Metal on a Mac). Fastest 3D.</p><p><b>virgl</b>: the older OpenGL route to your GPU. Try it if Venus misbehaves.</p><p><b>Software</b>: the Pi draws everything on the CPU. Always works; 3D is slow.</p>",
+  display: "<p><b>In Zero Lab</b> shows the Pi's screen in this window. <b>Separate window</b> uses QEMU's own window instead, which can feel snappier.</p>",
+  network: "<p>Lets the Pi reach the internet through your computer, for things like apt and pip. Sending your code to the Pi works either way.</p>",
+  snapshot: "<p><b>On</b>: each boot starts from the last saved state and today's changes are thrown away when the Pi stops. Good for experiments.</p><p><b>Off</b>: the Pi keeps its files, like a real SD card.</p>",
+};
+const tipbox = Object.assign(document.createElement("div"), { id: "tipbox", role: "tooltip", hidden: true });
+let tipOwner = null, tipPinned = false;
+function showTip(btn) {
+  if (tipOwner && tipOwner !== btn) tipOwner.setAttribute("aria-expanded", "false");
+  tipOwner = btn; tipbox.innerHTML = TIPS[btn.dataset.tip] || "";
+  (btn.closest("dialog") || document.body).append(tipbox);
+  tipbox.hidden = false; btn.setAttribute("aria-expanded", "true"); btn.setAttribute("aria-describedby", "tipbox");
+  const r = btn.getBoundingClientRect(), w = tipbox.offsetWidth, h = tipbox.offsetHeight;
+  tipbox.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2)) + "px";
+  tipbox.style.top = (r.bottom + 8 + h < innerHeight ? r.bottom + 8 : r.top - h - 8) + "px";
+}
+function hideTip() {
+  tipbox.hidden = true; tipPinned = false;
+  if (tipOwner) { tipOwner.setAttribute("aria-expanded", "false"); tipOwner.removeAttribute("aria-describedby"); tipOwner = null; }
+}
+document.querySelectorAll(".tip").forEach((b) => {
+  b.setAttribute("aria-expanded", "false");
+  b.onmouseenter = b.onfocus = () => showTip(b);
+  b.onmouseleave = b.onblur = () => { if (!tipPinned) hideTip(); };
+  b.onclick = (e) => { e.preventDefault(); if (tipPinned && tipOwner === b) hideTip(); else { showTip(b); tipPinned = true; } };
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !tipbox.hidden) { e.preventDefault(); e.stopPropagation(); hideTip(); } }, true);
+document.addEventListener("pointerdown", (e) => { if (tipPinned && !e.target.closest(".tip")) hideTip(); });
+
+// Deep links for help pages and docs: #checklist, #settings, #tip-<name> (e.g. #tip-accel).
+function openFromHash() {
+  const h = location.hash.slice(1);
+  if (h === "checklist") readyDlg.showModal();
+  else if (h === "settings") dlg.showModal();
+  else if (h.startsWith("tip-") && TIPS[h.slice(4)]) {
+    dlg.showModal();
+    const b = document.querySelector(`.tip[data-tip="${h.slice(4)}"]`);
+    if (b) { showTip(b); tipPinned = true; }
+  }
+}
+window.addEventListener("hashchange", openFromHash);
+refresh().then(openFromHash).catch((e) => toast(e.message));

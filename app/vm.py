@@ -27,7 +27,9 @@ def host():
     mac_ver = int(platform.mac_ver()[0].split(".")[0] or 0) if system == "Darwin" else 0
     accels = ["tcg"]
     if system == "Darwin" and arch == "arm64":
-        accels.insert(0, "hvf")
+        import readiness  # noqa: PLC0415 - small module, avoids a cycle
+        if readiness.hvf_supported():
+            accels.insert(0, "hvf")
     if system == "Darwin":
         # Venus needs HVF's 4 KiB IPA granule (macOS 26+) or TCG; virgl needs ANGLE (not bundled).
         gpus = ["venus", "soft"] if mac_ver >= 26 or arch != "arm64" else ["soft"]

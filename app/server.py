@@ -25,6 +25,7 @@ from urllib.parse import parse_qs, urlparse
 import gpio
 import guest
 import image
+import readiness
 import vm as vmod
 
 APP = Path(__file__).resolve().parent
@@ -105,8 +106,15 @@ class App:
                 st = {"provisioned": False, "broken": True}
             entry = next((e for e in image.CATALOG if e["id"] == st.get("source")), None)
             label = entry["name"] if entry else Path(st.get("source", d.name)).name
-            out.append({"name": d.name, "label": label, **st})
+            boot = all((d / f).exists() for f in ("kernel8.img", "stock.dtb"))
+            out.append({"name": d.name, "label": label, "boot_files": boot, **st})
         return out
+
+    def readiness(self):
+        if not hasattr(self, "_qemu"):  # QEMU doesn't change while the app runs; probe once
+            self._qemu = readiness.qemu_probe(vmod.qemu_paths, vmod.qemu_env)
+        return readiness.check(self.host, self._qemu, self.images(), self.cfg.get("image"), self.busy,
+                               shutil.disk_usage(self.data).free, image.CATALOG)
 
     def paths(self):
         return {"home": str(Path.home()), "data": str(self.data), "layouts": str(self.data / "layouts"),
@@ -159,6 +167,9 @@ class App:
         st = json.loads((d / "state.json").read_text())
         if not st.get("provisioned"):
             raise ValueError("this image is not set up yet")
+        r = self.readiness()
+        if not r["ready"]:
+            raise ValueError("Not ready to boot: " + ", ".join(x["title"] for x in r["rows"] if x["required"] and x["state"] != "ok"))
         cfg = vmod.resolve(self.cfg, self.host)
         self.markers.clear()
         self.vm.start(cfg, d, "desktop", (APP / "guest/setup.sh").read_text(), {"zl-user": st["user"]},
@@ -289,6 +300,9 @@ def make_handler(app, token, port):
             elif path == "/api/state":
                 if self.guard(True):
                     self.reply(200, app.state())
+            elif path == "/api/readiness":
+                if self.guard(True):
+                    self.reply(200, app.readiness())
             elif path == "/api/events":
                 if self.guard(True):
                     self.events()
