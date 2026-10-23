@@ -1,37 +1,44 @@
 #!/bin/bash
-# Build Zero-Lab-<version>-windows-x64-setup.exe for Windows 10/11 x64: a per-user install wizard, no admin, no WSL,
-# and Zero-Lab-<version>-windows-x64-sources.zip (the GPL/LGPL sources, a download of its own).
-# The Pi's CPU is emulated (TCG) and its screen drawn in software, as under WSL; only the install gets simpler.
+# Build Zero-Lab-<version>-windows-x64-setup.exe for Windows 10/11 x64 (a per-user install wizard: no admin,
+# no WSL) and Zero-Lab-<version>-windows-x64-sources.zip (the GPL/LGPL sources, a download of its own).
+# The Pi's CPU is emulated (TCG) and its screen drawn in software, as under WSL.
 #
-#   tools/make-windows-bundle.sh qemu   the QEMU fork at $ZL_QEMU_COMMIT + windows/qemu-mingw.patch, and its DLLs
-#   tools/make-windows-bundle.sh installer  + Python, app, samples, kernel -> build/windows/*-setup.exe, *-sources.zip
-#   tools/make-windows-bundle.sh all
+#   tools/make-windows-installer.sh deps       the pinned mingw-w64 toolchain, DLLs and NSIS (Fedora builds)
+#   tools/make-windows-installer.sh qemu       the QEMU fork at $ZL_QEMU_COMMIT, and the DLLs it loads
+#   tools/make-windows-installer.sh installer  + Python, app, samples, kernel -> build/windows/*-setup.exe, *-sources.zip
+#   tools/make-windows-installer.sh all
 #
-# Runs on Fedora (a container or a WSL distro), which packages the mingw-w64 toolchain and libraries:
-#   dnf install mingw64-gcc mingw64-glib2 mingw64-pixman mingw64-pkg-config git python3 meson ninja-build \
-#     bison flex make diffutils findutils tar xz bzip2 perl curl mingw32-nsis ImageMagick 'dnf-command(download)'
-# Env: ZL_QEMU_REPO, ZL_QEMU_COMMIT (tools/qemu-pin.sh), ZL_JOBS (default 4).
-# Needs kernel/kernel8-virtio.img (kernel/build.sh).
+# Runs as root in the Fedora image pinned in tools/pins.sh ($ZL_WIN_IMAGE), from a clean clone:
+#   docker run --rm -v "$PWD:/src" -w /src <ZL_WIN_IMAGE> tools/make-windows-installer.sh all
+# Every input is pinned there; only build tools (meson, ninja, git, ...) come from the image's own repos.
+# Needs kernel/kernel8-virtio.img (kernel/build.sh). Env: ZL_QEMU_REPO (a local clone of the fork), ZL_JOBS.
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
+. "$ROOT/tools/pins.sh"
 B="$ROOT/build/windows"
 JOBS=${ZL_JOBS:-4}
-. "$ROOT/tools/qemu-pin.sh"  # ZL_QEMU_COMMIT
-QEMU_REPO=${ZL_QEMU_REPO:-https://github.com/dsellerbrock/qemu-raspi-zero2w.git}
+QEMU_REPO=${ZL_QEMU_REPO:-$ZL_QEMU_URL}
+# In a container the checkout usually belongs to another user than root; let git use it anyway.
+export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0='*'
 SYSROOT=/usr/x86_64-w64-mingw32/sys-root/mingw/bin
-PY_URL=https://github.com/astral-sh/python-build-standalone/releases/download/20251014/cpython-3.12.12+20251014-x86_64-pc-windows-msvc-install_only_stripped.tar.gz
-PY_SHA=3c8b9b10a933909c98b9916297e2093b24a9c2abaa23df1c2622c2bfe052cb94
-V=$(python3 -c 'import plistlib,sys; print(plistlib.load(open(sys.argv[1],"rb"))["CFBundleShortVersionString"])' "$ROOT/mac/Info.plist")
+V=$(python3 -c 'import plistlib,sys; print(plistlib.load(open(sys.argv[1],"rb"))["CFBundleShortVersionString"])' "$ROOT/mac/Info.plist" 2>/dev/null \
+    || sed -n '/CFBundleShortVersionString/{n;s/.*<string>\(.*\)<\/string>.*/\1/p;}' "$ROOT/mac/Info.plist")
 NAME="Zero-Lab-$V-windows-x64"
 mkdir -p "$B"
 
+deps() {
+  dnf -y -q install git python3 meson ninja-build bison flex make diffutils findutils tar xz bzip2 perl \
+    ImageMagick
+  zl_fetch_koji "$ZL_WIN_RPMS" "$B/rpms"
+  # exactly these builds (their host-side dependencies come from the image's repos)
+  local rpms=() p s
+  while read -r p s; do [ -n "$p" ] && rpms+=("$B/rpms/${p##*/}"); done <<< "$ZL_WIN_RPMS"
+  dnf -y -q install "${rpms[@]}"
+  echo "deps ok: $(x86_64-w64-mingw32-gcc --version | head -1), $(makensis -VERSION)"
+}
+
 qemu() {
-  # A shallow clone at the pinned commit, never a working tree another session is editing.
-  [ -d "$B/qemu-src/.git" ] || git init -q "$B/qemu-src"
-  git -C "$B/qemu-src" fetch -q --depth 1 "$QEMU_REPO" "$ZL_QEMU_COMMIT"
-  git -C "$B/qemu-src" checkout -q -f "$ZL_QEMU_COMMIT"
-  git -C "$B/qemu-src" clean -qfdx
-  git -C "$B/qemu-src" apply "$ROOT/windows/qemu-mingw.patch"
+  zl_checkout "$QEMU_REPO" "$ZL_QEMU_COMMIT" "$B/qemu-src"
   rm -rf "$B/qemu-build" && mkdir -p "$B/qemu-build"
   # libslirp and libfdt come from QEMU's meson subprojects (Fedora has no mingw libslirp).
   (cd "$B/qemu-build" && "$B/qemu-src/configure" --cross-prefix=x86_64-w64-mingw32- \
@@ -60,7 +67,7 @@ qemu() {
       if [ -f "$SYSROOT/$d" ] && [ ! -f "$Q/$d" ]; then
         cp "$SYSROOT/$d" "$Q/"
         todo="$todo $Q/$d"
-        echo "$d $(rpm -qf --qf '%{SOURCERPM}' "$SYSROOT/$d")" >> "$B/dll-sources.txt"
+        echo "$d $(rpm -qf --qf '%{NAME}-%{VERSION}-%{RELEASE} (source %{SOURCERPM})' "$SYSROOT/$d")" >> "$B/dll-sources.txt"
       fi
     done
   done
@@ -81,26 +88,26 @@ installer() {
   cp -R "$B/qemu" "$Z/qemu"
   find "$Z" -name __pycache__ -prune -exec rm -rf {} +
   # Python (relocatable CPython for Windows, with its VC++ runtime DLLs; PSF licence)
-  [ -f "$B/python.tar.gz" ] || curl -fL --retry 3 -o "$B/python.tar.gz" "$PY_URL"
-  echo "$PY_SHA  $B/python.tar.gz" | sha256sum -c - >/dev/null
+  [ -f "$B/python.tar.gz" ] || curl -fsSL --retry 3 -o "$B/python.tar.gz" "$ZL_WIN_PYTHON_URL"
+  echo "$ZL_WIN_PYTHON_SHA  $B/python.tar.gz" | sha256sum -c --quiet -
   tar -xzf "$B/python.tar.gz" -C "$Z"
   P="$Z/python"
   rm -rf "$P/Lib/test" "$P/Lib/idlelib" "$P/Lib/tkinter" "$P/Lib/turtledemo" "$P/Lib/ensurepip" "$P/tcl" \
          "$P/include" "$P/libs" "$P"/DLLs/_tkinter.pyd "$P"/DLLs/tcl*.dll "$P"/DLLs/tk*.dll
   makensis -V2 -DVERSION="$V" -DSTAGE="$S" -DOUTFILE="$B/$NAME-setup.exe" "$ROOT/windows/installer.nsi"
-  # Complete corresponding source, a download of its own: the QEMU fork (+ patch, inside the Zero Lab tarball),
-  # the meson subprojects linked into it, and the Fedora source packages of the LGPL DLLs (GLib, libintl).
-  ZL_QEMU_REPO="$B/qemu-src" "$ROOT/tools/source-bundle.sh" "$G" windows >/dev/null
+  # Complete corresponding source: the QEMU fork and Zero Lab (tools/source-bundle.sh), the meson subprojects
+  # linked into QEMU, and the Fedora source packages of the LGPL DLLs (GLib, libintl) and of NSIS.
+  ZL_QEMU_REPO="$B/qemu-src" "$ROOT/tools/source-bundle.sh" "$G" >/dev/null
   tar -C "$B/qemu-src" -cJf "$G/qemu-subprojects-slirp-dtc.tar.xz" subprojects/slirp subprojects/dtc
-  (cd "$G" && dnf -q download --source mingw-glib2 mingw-gettext mingw-nsis)
+  zl_fetch_koji "$ZL_WIN_SRPMS" "$G"
   cp "$B/dll-sources.txt" "$G/windows-dlls.txt"
   cat >> "$G/README.txt" <<TXT
 
-Windows installer: QEMU is the same fork with zero-lab/windows/qemu-mingw.patch applied, cross-built with
-Fedora's mingw-w64 by zero-lab/tools/make-windows-bundle.sh; libslirp and libfdt are QEMU's meson
-subprojects (qemu-subprojects-slirp-dtc.tar.xz). windows-dlls.txt lists each bundled DLL and the Fedora
-source package it comes from; the LGPL ones (GLib, libintl) are included here as .src.rpm files, as is
-NSIS (zlib licence), which made the installer (zero-lab/windows/installer.nsi).
+Windows installer: QEMU is the same fork, cross-built with Fedora's mingw-w64 by
+zero-lab/tools/make-windows-installer.sh (every input pinned in zero-lab/tools/pins.sh); libslirp and
+libfdt are QEMU's meson subprojects (qemu-subprojects-slirp-dtc.tar.xz). windows-dlls.txt lists each
+bundled DLL and its Fedora package; the LGPL ones (GLib, libintl) are included here as .src.rpm files,
+as is NSIS (zlib licence), which made the installer (zero-lab/windows/installer.nsi).
 TXT
   (cd "$B/sources" && rm -f "$B/$NAME-sources.zip" \
     && python3 -c 'import shutil,sys; shutil.make_archive(*sys.argv[1:])' "$B/$NAME-sources" zip . "Source code (GPL)")
@@ -109,8 +116,7 @@ TXT
 }
 
 case "${1:-all}" in
-  qemu) qemu ;;
-  installer) installer ;;
-  all) qemu; installer ;;
-  *) echo "usage: $0 qemu|installer|all" >&2; exit 2 ;;
+  deps|qemu|installer) "$1" ;;
+  all) deps; qemu; installer ;;
+  *) echo "usage: $0 deps|qemu|installer|all" >&2; exit 2 ;;
 esac
