@@ -41,6 +41,7 @@ https://download.gnome.org/sources/glib/2.90/glib-2.90.1.tar.xz 93c941aa17d5eb1d
 https://ftpmirror.gnu.org/gettext/gettext-1.0.tar.gz 85d99b79c981a404874c02e0342176cf75c7698e2b51fe41031cf6526d974f1a
 LIST
 cp "$ROOT/LICENSE" "$ROOT/THIRD-PARTY.md" "$OUT/"
+rm -rf "$OUT/patches" && cp -R "$ROOT/patches" "$OUT/patches"  # applied on top of the QEMU tarball by setup.sh
 cat > "$OUT/README.txt" <<TXT
 Complete corresponding source for Zero Lab binaries.
 QEMU (GPL-2.0): qemu-zero-lab-$short.tar.xz is the fork at commit $(git -C "$QEMU_REPO" rev-parse "$ZL_QEMU_COMMIT"),
