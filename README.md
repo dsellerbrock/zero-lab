@@ -72,7 +72,7 @@ mac/            ZeroLab.swift (window), build-bundle.sh (deps -> qemu -> app -> 
 linux/ windows/ installers
 samples/        one program + layout per GPIO part
 kernel/         build.sh + config for the Pi kernel (Pi OS 6.18.50 with virtio built in)
-tools/          source-bundle.sh (GPL sources), make-linux-windows-bundle.sh, shoot.sh (screenshots)
+tools/          source-bundle.sh (GPL sources), make-linux-windows-bundle.sh, shoot.mjs (screenshots once the page is ready)
 ```
 
 ## Security model
