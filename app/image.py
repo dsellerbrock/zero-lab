@@ -15,10 +15,13 @@ import platform
 import plistlib
 import re
 import shutil
+import struct
 import subprocess
 import tempfile
 import urllib.request
 from pathlib import Path
+
+from guest import openssh
 
 BASE = "https://downloads.raspberrypi.com"
 CATALOG = [
@@ -91,19 +94,36 @@ def download(entry, dest, progress):
         raise ValueError("download checksum mismatch; try again")
 
 
+def set_sparse(f):
+    """NTFS leaves skipped ranges unallocated only in files flagged sparse (APFS and ext4 always do)."""
+    if os.name == "nt":
+        import ctypes  # noqa: PLC0415
+        import msvcrt  # noqa: PLC0415
+        fsctl_set_sparse = 0x900C4
+        ctypes.windll.kernel32.DeviceIoControl(ctypes.c_void_p(msvcrt.get_osfhandle(f.fileno())), fsctl_set_sparse,
+                                               None, 0, None, 0, ctypes.byref(ctypes.c_ulong()), None)
+
+
+def write_sparse(f, out, tick=None):
+    """Copy f to out, seeking over all-zero 1 MiB blocks instead of writing them (faster, less disk)."""
+    set_sparse(out)
+    size, zero = 0, bytes(1 << 20)
+    while chunk := f.read(1 << 20):
+        if chunk == zero[:len(chunk)]:
+            out.seek(len(chunk), 1)
+        else:
+            out.write(chunk)
+        size += len(chunk)
+        if tick:
+            tick()
+    out.truncate(size)
+
+
 def decompress(src, dest, progress):
-    """Unpack .xz -> sparse raw image: all-zero blocks are skipped, not written (faster, less disk)."""
-    total, size = src.stat().st_size, 0
-    zero = bytes(1 << 20)
+    """Unpack .xz -> sparse raw image."""
+    total = src.stat().st_size
     with open(src, "rb") as raw, lzma.open(raw) as f, open(dest, "wb") as out:
-        while chunk := f.read(1 << 20):
-            if chunk == zero[:len(chunk)]:
-                out.seek(len(chunk), 1)
-            else:
-                out.write(chunk)
-            size += len(chunk)
-            progress("decompress", raw.tell(), total)
-        out.truncate(size)
+        write_sparse(f, out, lambda: progress("decompress", raw.tell(), total))
 
 
 def cached_image(entry, cache, progress):
@@ -127,7 +147,11 @@ def cached_image(entry, cache, progress):
 
 
 def clone(src, dest):
-    """Copy-on-write where the filesystem supports it (APFS, btrfs/xfs), plain copy otherwise."""
+    """Copy-on-write where the filesystem supports it (APFS, btrfs/xfs); on Windows a sparse copy."""
+    if os.name == "nt":
+        with open(src, "rb") as f, open(dest, "wb") as out:
+            write_sparse(f, out)
+        return
     flag = ["-c"] if platform.system() == "Darwin" else ["--reflink=auto"]
     if subprocess.run(["cp", *flag, str(src), str(dest)]).returncode:
         shutil.copyfile(src, dest)
@@ -147,12 +171,125 @@ def bootfs_offset(img):
     return bootfs_extent(img)[0]
 
 
+class Fat:
+    """Just enough FAT16/FAT32 for the boot partition where hdiutil and mtools are missing (Windows): read a file
+    in the root folder, or overwrite one that exists. No creating files, no subfolders."""
+
+    def __init__(self, f, offset):
+        self.f = f
+        f.seek(offset)
+        b = f.read(512)
+        bps, self.spc, rsvd, nfats, rootents, tot16 = struct.unpack_from("<HBHBHH", b, 11)
+        fatsz = struct.unpack_from("<H", b, 22)[0] or struct.unpack_from("<I", b, 36)[0]
+        tot = tot16 or struct.unpack_from("<I", b, 32)[0]
+        rootsecs = (rootents * 32 + bps - 1) // bps
+        if b[510:512] != b"\x55\xaa" or not bps or not self.spc:
+            raise ValueError("the boot partition is not FAT")
+        self.csize, self.nfats, self.fatlen = bps * self.spc, nfats, fatsz * bps
+        self.fatpos = offset + rsvd * bps
+        self.rootpos, self.rootlen = self.fatpos + nfats * self.fatlen, rootents * 32  # FAT16's fixed root folder
+        self.datapos = self.rootpos + rootsecs * bps  # cluster 2
+        self.nclus = (tot - rsvd - nfats * fatsz - rootsecs) // self.spc
+        if self.nclus < 4085:
+            raise ValueError("FAT12 is not supported")
+        self.fat32 = self.nclus >= 65525
+        self.root = struct.unpack_from("<I", b, 44)[0] if self.fat32 else None
+        self.fsinfo = offset + struct.unpack_from("<H", b, 48)[0] * bps if self.fat32 else None
+        self.eoc = 0x0FFFFFF8 if self.fat32 else 0xFFF8
+        f.seek(self.fatpos)
+        self.fat = bytearray(f.read(self.fatlen))
+
+    def entry(self, n):
+        return struct.unpack_from("<I", self.fat, n * 4)[0] & 0x0FFFFFFF if self.fat32 else \
+            struct.unpack_from("<H", self.fat, n * 2)[0]
+
+    def set_entry(self, n, v):
+        if self.fat32:  # the top 4 bits are reserved: keep them
+            struct.pack_into("<I", self.fat, n * 4, struct.unpack_from("<I", self.fat, n * 4)[0] & 0xF0000000 | v)
+        else:
+            struct.pack_into("<H", self.fat, n * 2, v)
+
+    def chain(self, c):
+        out = []
+        while 2 <= c < self.eoc and len(out) <= self.nclus:
+            out.append(c)
+            c = self.entry(c)
+        return out
+
+    def cluster(self, c):
+        return self.datapos + (c - 2) * self.csize
+
+    def find(self, name):
+        """-> (position of the file's 32-byte entry, entry) in the root folder; long names (VFAT) included."""
+        spans = [(self.cluster(c), self.csize) for c in self.chain(self.root)] if self.fat32 \
+            else [(self.rootpos, self.rootlen)]
+        lfn = []
+        for start, length in spans:
+            self.f.seek(start)
+            buf = self.f.read(length)
+            for i in range(0, length, 32):
+                e = buf[i:i + 32]
+                if e[0] == 0:
+                    break
+                if e[0] == 0xE5 or (e[11] & 0x08 and e[11] != 0x0F):  # deleted, or the volume label
+                    lfn = []
+                elif e[11] == 0x0F:  # long-name parts come last part first
+                    lfn.insert(0, e[1:11] + e[14:26] + e[28:32])
+                else:
+                    short = e[:8].decode("latin-1").rstrip() + ("." + e[8:11].decode("latin-1").rstrip()
+                                                                 if e[8:11].strip() else "")
+                    long = b"".join(lfn).decode("utf-16-le", "replace").split("\0")[0] if lfn else short
+                    lfn = []
+                    if not e[11] & 0x10 and name.lower() in (long.lower(), short.lower()):
+                        return start + i, bytearray(e)
+            else:
+                continue
+            break
+        raise FileNotFoundError(f"{name} is not on the boot partition")
+
+    def first(self, e):
+        return struct.unpack_from("<H", e, 26)[0] | (struct.unpack_from("<H", e, 20)[0] << 16 if self.fat32 else 0)
+
+    def read(self, name):
+        _, e = self.find(name)
+        out = bytearray()
+        for c in self.chain(self.first(e)):
+            self.f.seek(self.cluster(c))
+            out += self.f.read(self.csize)
+        return bytes(out[:struct.unpack_from("<I", e, 28)[0]])
+
+    def write(self, name, data):
+        pos, e = self.find(name)
+        for c in self.chain(self.first(e)):
+            self.set_entry(c, 0)
+        need = -(-len(data) // self.csize)
+        unused = [c for c in range(2, self.nclus + 2) if self.entry(c) == 0]  # ponytail: linear scan, fine for 512 MB
+        free = unused[:need]
+        if len(free) < need:
+            raise OSError("the boot partition is full")
+        for i, c in enumerate(free):
+            self.set_entry(c, free[i + 1] if i + 1 < need else 0x0FFFFFFF if self.fat32 else 0xFFFF)
+            self.f.seek(self.cluster(c))
+            self.f.write(data[i * self.csize:(i + 1) * self.csize])
+        first = free[0] if free else 0
+        struct.pack_into("<H", e, 20, first >> 16 if self.fat32 else 0)
+        struct.pack_into("<HI", e, 26, first & 0xFFFF, len(data))
+        self.f.seek(pos)
+        self.f.write(e)
+        for i in range(self.nfats):
+            self.f.seek(self.fatpos + i * self.fatlen)
+            self.f.write(self.fat)
+        if self.fsinfo:  # FAT32 keeps a free-cluster count
+            self.f.seek(self.fsinfo + 488)
+            self.f.write(struct.pack("<I", len(unused) - need))
+
+
 class BootFS:
-    """Read/write files on the image's FAT boot partition: hdiutil on macOS, mtools on Linux."""
+    """Read/write files on the image's FAT boot partition: hdiutil on macOS, mtools on Linux, else Fat."""
 
     def __init__(self, img, whole=False):
         """whole=True: img is the FAT partition itself, not a disk image with an MBR."""
-        self.img, self.whole, self.mount, self.dev = Path(img), whole, None, None
+        self.img, self.whole, self.mount, self.dev, self.fat = Path(img), whole, None, None, None
 
     def __enter__(self):
         if platform.system() == "Darwin":
@@ -163,6 +300,9 @@ class BootFS:
             self.dev = ents[0]["dev-entry"]
             self.mount = next(Path(e["mount-point"]) for e in ents
                               if e.get("mount-point") and (Path(e["mount-point"]) / "config.txt").exists())
+        elif not shutil.which("mcopy"):
+            self.file = open(self.img, "r+b")
+            self.fat = Fat(self.file, 0 if self.whole else bootfs_offset(self.img))
         else:
             self.spec = f"{self.img}@@{0 if self.whole else bootfs_offset(self.img)}"
             # Pi OS FAT geometry trips mtools' sanity check ("not a multiple of sectors per track")
@@ -170,17 +310,23 @@ class BootFS:
         return self
 
     def __exit__(self, *_):
+        if self.fat:
+            self.file.close()
         if self.dev:
             subprocess.run(["hdiutil", "detach", self.dev], capture_output=True)
 
     def get(self, name, dest):
-        if self.mount:
+        if self.fat:
+            Path(dest).write_bytes(self.fat.read(name))
+        elif self.mount:
             shutil.copyfile(self.mount / name, dest)
         else:
             subprocess.run(["mcopy", "-n", "-i", self.spec, f"::{name}", str(dest)], check=True, env=self.env)
 
     def put(self, name, data):
-        if self.mount:
+        if self.fat:
+            self.fat.write(name, data)
+        elif self.mount:
             (self.mount / name).write_bytes(data)
         else:
             with tempfile.NamedTemporaryFile() as t:
@@ -226,7 +372,10 @@ def prepare(source, imgdir, user, password, qemu_img, progress):
     key = ssh / "id_ed25519"
     key.unlink(missing_ok=True)
     (ssh / "id_ed25519.pub").unlink(missing_ok=True)
-    subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", "zero-lab", "-f", str(key)], check=True)
+    subprocess.run([openssh("ssh-keygen"), "-q", "-t", "ed25519", "-N", "", "-C", "zero-lab", "-f", str(key)], check=True)
+    if os.name == "nt":  # Windows OpenSSH refuses a key others can read; ours inherits the data folder's access list
+        subprocess.run(["icacls", str(key), "/inheritance:r", "/grant:r", f"{os.environ['USERNAME']}:F"],
+                       check=True, capture_output=True)
     with BootFS(base) as fs:
         for name, local in BOOT_FILES.items():
             fs.get(name, imgdir / local)

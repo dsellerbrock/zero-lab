@@ -21,6 +21,11 @@ DEFAULTS = {"ram": 512, "cpus": 4, "accel": "auto", "gpu": "auto", "snapshot": F
             "network": True, "display": "app"}
 GPUS = ("venus", "virgl", "soft")
 READY_MARK = "ZL_DESKTOP_READY"
+WINDOWS = platform.system() == "Windows"
+EXE = ".exe" if WINDOWS else ""
+# Serial console, QMP and QTest: socket files in a private run dir; on Windows, where Python has no
+# AF_UNIX, loopback TCP ports instead (one client each: the app connects first and holds them).
+UNIX_SOCKETS = hasattr(socket, "AF_UNIX")
 ANSI = re.compile(r"\x1b\[[0-9;:?]*[A-Za-z]|\x1b[()][A-Za-z0-9]|\r")
 ANSI_TAIL = re.compile(r"\x1b(\[[0-9;:?]*|[()])?$")  # an escape sequence cut off at the end of a chunk
 
@@ -75,12 +80,13 @@ def free_port():
 
 
 def qemu_paths():
-    """Bundled QEMU (macOS .app or Linux setup) unless ZL_QEMU_DIR overrides it."""
+    """Bundled QEMU (macOS .app, Linux setup, Windows zip) unless ZL_QEMU_DIR overrides it."""
     for d in (os.environ.get("ZL_QEMU_DIR"), APP.parent / "qemu",
               Path.home() / ".local/share/zero-lab/qemu"):
-        if d and (Path(d) / "bin/qemu-system-aarch64").exists():
-            d = Path(d)
-            return d / "bin/qemu-system-aarch64", d / "bin/qemu-img", d
+        for b in ("bin/", ""):  # Windows builds keep the exe, its DLLs and share/ side by side
+            if d and (Path(d) / f"{b}qemu-system-aarch64{EXE}").exists():
+                d = Path(d)
+                return d / f"{b}qemu-system-aarch64{EXE}", d / f"{b}qemu-img{EXE}", d
     q = shutil.which("qemu-system-aarch64")
     if not q:
         raise FileNotFoundError("QEMU not found; run the Zero Lab setup first")
@@ -97,6 +103,31 @@ def qemu_env(qdir):
         if server.exists():
             env["RENDER_SERVER_EXEC_PATH"] = str(server)
     return env
+
+
+def channels(run, ports):
+    """name -> where QEMU listens: a socket file path, or a (host, port) loopback address."""
+    names = ("serial", "qmp", "qtest")
+    if UNIX_SOCKETS:
+        return {n: str(run / f"{n}.sock") for n in names}
+    return {n: ("127.0.0.1", ports[n]) for n in names}
+
+
+def connect(addr, proc=None, timeout=30):
+    """A connected socket to one of QEMU's channels, retrying while QEMU starts. None if QEMU exits
+    or the timeout passes first."""
+    end = time.time() + timeout
+    while True:
+        s = socket.socket(socket.AF_UNIX if isinstance(addr, str) else socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(10)
+        try:
+            s.connect(addr)
+            return s
+        except OSError:
+            s.close()
+        if time.time() > end or (proc and proc.poll() is not None):
+            return None
+        time.sleep(0.1)
 
 
 def virtio_kernel():
@@ -150,14 +181,18 @@ def build_argv(qemu, cfg, img, run, ports, mode="desktop", kernel=None):
                    "systemd.mask=plymouth-quit.service", "systemd.mask=plymouth-quit-wait.service",
                    "systemd.mask=apt-daily.timer", "systemd.mask=apt-daily-upgrade.timer", "systemd.mask=man-db.timer"]
 
+    chan = channels(run, ports)
+    at = {n: f"path={a}" if isinstance(a, str) else f"host={a[0]},port={a[1]}" for n, a in chan.items()}
+    at.update({n: f"unix:{a}" if isinstance(a, str) else f"tcp:{a[0]}:{a[1]}"
+               for n, a in chan.items() if n != "serial"})
     disk = f"file={img / 'disk.qcow2'},format=qcow2,snapshot={'on' if cfg['snapshot'] else 'off'}"
     argv = [str(qemu), "-name", "Zero Lab", "-M", "raspi3ap", "-m", f"{cfg['ram']}M",
             "-smp", str(cfg["cpus"]), "-kernel", str(kernel or img / "kernel8.img"),
             "-dtb", str(run / "boot.dtb"),
-            "-chardev", f"socket,id=uart,path={run / 'serial.sock'},server=on,wait=off,logfile={run / 'serial.log'}",
+            "-chardev", f"socket,id=uart,{at['serial']},server=on,wait=off,logfile={run / 'serial.log'}",
             "-serial", "chardev:uart",
-            "-monitor", "none", "-qmp", f"unix:{run / 'qmp.sock'},server=on,wait=off",
-            "-qtest", f"unix:{run / 'qtest.sock'},server=on,wait=off",
+            "-monitor", "none", "-qmp", f"{at['qmp']},server=on,wait=off",
+            "-qtest", f"{at['qtest']},server=on,wait=off",
             "-usb", "-device", "usb-kbd", "-device", "usb-tablet"]
     argv += ["-accel", "hvf"] if cfg["accel"] == "hvf" else ["-accel", "tcg,thread=multi"]
     if virtio_root:  # raspi-zero2w 5fbae66: virtio-blk on the second virtio-mmio slot, write-back cache
@@ -220,10 +255,8 @@ def img_partuuid(base):
 
 
 class QMP:
-    def __init__(self, path, timeout=10):
-        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        self.sock.settimeout(timeout)
-        self.sock.connect(str(path))
+    def __init__(self, sock):
+        self.sock = sock
         self.f = self.sock.makefile("rw", encoding="utf-8")
         json.loads(self.f.readline())  # greeting
         self.cmd("qmp_capabilities")
@@ -242,17 +275,6 @@ class QMP:
         self.sock.close()
 
 
-def wait_for(path, proc, timeout=30):
-    end = time.time() + timeout
-    while time.time() < end:
-        if Path(path).exists():
-            return True
-        if proc.poll() is not None:
-            return False
-        time.sleep(0.1)
-    return False
-
-
 class VM:
     """One QEMU at a time. emit(type, **data) publishes events to the UI."""
 
@@ -266,7 +288,9 @@ class VM:
         self.serial = None
         self.cfg = None
         self.mode = self.img = None
+        self.chan = None
         self.lock = threading.Lock()
+        self.qmp_lock, self._qmp = threading.Lock(), None
 
     def set_status(self, status, **extra):
         self.status = status
@@ -280,7 +304,8 @@ class VM:
             self.cfg, self.ready, self.seen, self.mode, self.img = cfg, ready, set(), mode, img
             # Short socket dir: AF_UNIX paths are limited to ~104 bytes on macOS.
             self.run = Path(tempfile.mkdtemp(prefix="zl-"))
-            self.ports = {"ssh": free_port(), "ws": free_port(), "vnc": free_port()}
+            self.ports = {n: free_port() for n in ("ssh", "ws", "vnc", "serial", "qmp", "qtest")}
+            self.chan = channels(self.run, self.ports)
             props = {"zl-epoch": str(int(time.time())), **(chosen or {})}  # the Pi has no RTC
             if setup_script:
                 props["zl-setup"] = base64.b64encode(gzip.compress(setup_script.encode(), mtime=0)).decode()
@@ -292,14 +317,22 @@ class VM:
             argv = build_argv(qemu, cfg, img, self.run, self.ports, mode, kernel)
             (self.run / "argv.json").write_text(json.dumps(argv, indent=1))
             log = open(self.run / "qemu.log", "wb")
+            # Windows: its own process group, so Ctrl+C in the console reaches only the app, which powers off the Pi
             self.proc = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
-                                         env=qemu_env(qdir), start_new_session=True)
+                                         env=qemu_env(qdir), start_new_session=True,
+                                         creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
             self.started = time.time()
             self.set_status("booting", mode=mode, cfg=cfg)
-        if not wait_for(self.run / "serial.sock", self.proc):
+        serial = connect(self.chan["serial"], self.proc)
+        if not serial:
             self.set_status("stopped", error=self.log_tail())
             raise RuntimeError("QEMU did not start:\n" + self.log_tail())
-        threading.Thread(target=self._serial_reader, daemon=True).start()
+        self.serial = serial
+        try:
+            self.qmp("query-status")  # take the one QMP connection now, before anything else on this machine can
+        except (OSError, RuntimeError, ValueError):
+            pass
+        threading.Thread(target=self._serial_reader, args=(serial,), daemon=True).start()
         threading.Thread(target=self._reaper, daemon=True).start()
 
     def log_tail(self):
@@ -308,10 +341,8 @@ class VM:
         except OSError:
             return ""
 
-    def _serial_reader(self):
-        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        s.connect(str(self.run / "serial.sock"))
-        self.serial = s
+    def _serial_reader(self, s):
+        s.settimeout(None)
         buf, carry = "", ""
         decode = codecs.getincrementaldecoder("utf-8")("replace").decode  # characters split across reads
         while True:
@@ -346,17 +377,29 @@ class VM:
 
     def _reaper(self):
         code = self.proc.wait()
+        with self.qmp_lock:
+            if self._qmp:
+                self._qmp.close()
+                self._qmp = None
         if self.serial:
             self.serial.close()
             self.serial = None
         self.set_status("stopped", exit_code=code)
 
     def qmp(self, name, **args):
-        q = QMP(self.run / "qmp.sock")
-        try:
-            return q.cmd(name, **args)
-        finally:
-            q.close()
+        """One QMP connection per QEMU run, held open (QEMU serves one client at a time)."""
+        with self.qmp_lock:
+            if not self._qmp:
+                s = connect(self.chan["qmp"], self.proc, 10)
+                if not s:
+                    raise OSError("QMP is not available")
+                self._qmp = QMP(s)
+            try:
+                return self._qmp.cmd(name, **args)
+            except (OSError, ValueError):  # a broken or out-of-step connection: the next call reconnects
+                self._qmp.close()
+                self._qmp = None
+                raise
 
     def stop(self, poweroff=None, timeout=45):
         """poweroff(): asks the guest to shut down (over SSH); the serial reader quits QEMU

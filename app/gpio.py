@@ -4,7 +4,6 @@ QTest can read/write any guest memory, so this module only ever touches the
 GPIO registers below. The fork's bcm2835_gpio model raises edge interrupts when
 GPSET/GPCLR change a level, so guest gpiozero/libgpiod edge waits work.
 """
-import socket
 import threading
 import time
 
@@ -19,10 +18,9 @@ HEADER_PINS = 28  # BCM 0-27 are on the 40-pin header
 
 
 class QTest:
-    def __init__(self, path, timeout=5):
-        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    def __init__(self, sock, timeout=5):
+        self.sock = sock
         self.sock.settimeout(timeout)
-        self.sock.connect(path)
         self.reader = self.sock.makefile("r", encoding="ascii", newline="\n")
         self.lock = threading.Lock()
 
