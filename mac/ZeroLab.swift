@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     let server = Process()
     let toServer = Pipe()
     var quitting = false
+    var attached = false  // another Zero Lab's engine already runs on this data: show it, don't own it
 
     func applicationDidFinishLaunching(_ note: Notification) {
         buildMenu()
@@ -49,14 +50,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         server.standardOutput = out
         out.fileHandleForReading.readabilityHandler = { [weak self] h in
             guard let text = String(data: h.availableData, encoding: .utf8) else { return }
-            for line in text.split(separator: "\n") where line.hasPrefix("ZL_URL ") {
-                let url = URL(string: String(line.dropFirst(7)))!
-                DispatchQueue.main.async { self?.web.load(URLRequest(url: url)) }
+            for line in text.split(separator: "\n") {
+                for (prefix, attach) in [("ZL_URL ", false), ("ZL_ALREADY_RUNNING ", true)] where line.hasPrefix(prefix) {
+                    guard let url = URL(string: String(line.dropFirst(prefix.count))) else { continue }
+                    DispatchQueue.main.async { self?.attached = attach || (self?.attached ?? false); self?.web.load(URLRequest(url: url)) }
+                }
             }
         }
         server.terminationHandler = { [weak self] _ in
             DispatchQueue.main.async {
-                guard let self = self, !self.quitting else { return }
+                guard let self = self, !self.quitting, !self.attached else { return }
                 let a = NSAlert()
                 a.messageText = "Zero Lab's engine stopped"
                 a.informativeText = "Details are in ~/Library/Logs/Zero Lab/server.log"
@@ -72,7 +75,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     func applicationShouldTerminateAfterLastWindowClosed(_ app: NSApplication) -> Bool { true }
 
     func applicationShouldTerminate(_ app: NSApplication) -> NSApplication.TerminateReply {
-        guard server.isRunning else { return .terminateNow }
+        guard server.isRunning, !attached else { return .terminateNow }  // an attached window leaves the other engine running
         quitting = true
         try? toServer.fileHandleForWriting.close()  // server: stop the VM cleanly, then exit
         DispatchQueue.global().async {
