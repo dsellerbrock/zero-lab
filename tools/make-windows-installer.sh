@@ -87,8 +87,9 @@ installer() {
   cp -R "$B/qemu" "$Z/qemu"
   find "$Z" -name __pycache__ -prune -exec rm -rf {} +
   # Python (relocatable CPython for Windows, with its VC++ runtime DLLs; PSF licence)
-  [ -f "$B/python.tar.gz" ] || curl -fsSL --retry 5 --retry-all-errors -o "$B/python.tar.gz" "$ZL_WIN_PYTHON_URL"
-  echo "$ZL_WIN_PYTHON_SHA  $B/python.tar.gz" | sha256sum -c --quiet -
+  [ -f "$B/python.tar.gz" ] || { curl -fsSL --retry 5 --retry-all-errors -o "$B/python.tar.gz.part" "$ZL_WIN_PYTHON_URL" \
+    && mv "$B/python.tar.gz.part" "$B/python.tar.gz"; }
+  echo "$ZL_WIN_PYTHON_SHA  $B/python.tar.gz" | sha256sum -c --quiet - || { rm -f "$B/python.tar.gz"; exit 1; }
   tar -xzf "$B/python.tar.gz" -C "$Z"
   P="$Z/python"
   rm -rf "$P/Lib/test" "$P/Lib/idlelib" "$P/Lib/tkinter" "$P/Lib/turtledemo" "$P/Lib/ensurepip" "$P/tcl" \
