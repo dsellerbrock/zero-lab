@@ -10,6 +10,7 @@ Layout of an image dir:
 import hashlib
 import json
 import lzma
+import os
 import platform
 import plistlib
 import re
@@ -125,6 +126,8 @@ class BootFS:
                               if e.get("mount-point") and (Path(e["mount-point"]) / "config.txt").exists())
         else:
             self.spec = f"{self.img}@@{bootfs_offset(self.img)}"
+            # Pi OS FAT geometry trips mtools' sanity check ("not a multiple of sectors per track")
+            self.env = {**os.environ, "MTOOLS_SKIP_CHECK": "1"}
         return self
 
     def __exit__(self, *_):
@@ -135,7 +138,7 @@ class BootFS:
         if self.mount:
             shutil.copyfile(self.mount / name, dest)
         else:
-            subprocess.run(["mcopy", "-n", "-i", self.spec, f"::{name}", str(dest)], check=True)
+            subprocess.run(["mcopy", "-n", "-i", self.spec, f"::{name}", str(dest)], check=True, env=self.env)
 
     def put(self, name, data):
         if self.mount:
@@ -144,7 +147,7 @@ class BootFS:
             with tempfile.NamedTemporaryFile() as t:
                 t.write(data)
                 t.flush()
-                subprocess.run(["mcopy", "-o", "-i", self.spec, t.name, f"::{name}"], check=True)
+                subprocess.run(["mcopy", "-o", "-i", self.spec, t.name, f"::{name}"], check=True, env=self.env)
 
 
 def user_data(user, password, pubkey):
