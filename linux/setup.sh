@@ -11,6 +11,8 @@ DEST=${ZL_PREFIX:-$HOME/.local/share/zero-lab}
 WORK=${ZL_WORK:-$HOME/.cache/zero-lab-build}
 JOBS=${ZL_JOBS:-$(nproc)}
 IS_WSL=0; grep -qi microsoft /proc/version 2>/dev/null && IS_WSL=1
+# Build steps log to a file; on failure show its tail so friends can send it to you.
+logged() { "$@" >> "$WORK/build.log" 2>&1 || { tail -n 40 "$WORK/build.log"; die "build step failed: $* (full log: $WORK/build.log)"; }; }
 say() { printf '\033[1;35m==>\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31mError:\033[0m %s\n' "$*" >&2; exit 1; }
 
@@ -62,16 +64,17 @@ build() {
   tar -xJf "$q" -C "$WORK/qemu" --strip-components 1
   tar -xJf "$v" -C "$WORK/virgl" --strip-components 1
   say "Building virglrenderer with Venus ($JOBS jobs)"
-  meson setup -q "$WORK/virgl-build" "$WORK/virgl" --prefix="$DEST/qemu" --libdir=lib \
-    -Dvenus=true -Dtests=false -Dtracing=none >/dev/null
-  ninja -C "$WORK/virgl-build" -j"$JOBS" install >/dev/null
+  # The pinned virglrenderer has one GCC-only pedantic error (declaration after a case label).
+  logged meson setup "$WORK/virgl-build" "$WORK/virgl" --prefix="$DEST/qemu" --libdir=lib \
+    -Dvenus=true -Dtests=false -Dtracing=none -Dc_args=-Wno-error=pedantic
+  logged ninja -C "$WORK/virgl-build" -j"$JOBS" install
   say "Building QEMU (this takes a while: 10-40 minutes)"
   mkdir -p "$WORK/qemu-build"
-  (cd "$WORK/qemu-build" && PKG_CONFIG_PATH="$DEST/qemu/lib/pkgconfig" "$WORK/qemu/configure" \
+  (cd "$WORK/qemu-build" && PKG_CONFIG_PATH="$DEST/qemu/lib/pkgconfig" logged "$WORK/qemu/configure" \
      --prefix="$DEST/qemu" --extra-ldflags="-Wl,-rpath,$DEST/qemu/lib" --target-list=aarch64-softmmu --enable-slirp --enable-vnc --enable-tools \
      --enable-opengl --enable-virglrenderer --disable-docs --disable-gtk --disable-sdl \
-     --disable-guest-agent --disable-capstone >/dev/null)
-  ninja -C "$WORK/qemu-build" -j"$JOBS" install >/dev/null
+     --disable-guest-agent --disable-capstone)
+  logged ninja -C "$WORK/qemu-build" -j"$JOBS" install
   echo "$stamp" > "$DEST/qemu/.built-from"
   rm -rf "$WORK"
   say "QEMU: $(LD_LIBRARY_PATH="$DEST/qemu/lib" "$DEST/qemu/bin/qemu-system-aarch64" --version | head -n1)"
