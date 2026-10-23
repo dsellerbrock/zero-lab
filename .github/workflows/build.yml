@@ -155,7 +155,7 @@ jobs:
     needs: appimage
     runs-on: ubuntu-24.04
     timeout-minutes: 60
-    env: { ZL: "/mnt/zl" }  # throwaway HOME + TMPDIR on the runner's big scratch disk (the Pi image takes ~15 GB)
+    env: { ZL: "/mnt/zl" }  # throwaway HOME + TMPDIR (the Pi image takes ~15 GB)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -207,3 +207,77 @@ jobs:
             /mnt/zl/tmp/zl-*/*.log
             /mnt/zl/tmp/zl-*/*.png
             /mnt/zl/tmp/zl-*/argv.json
+
+  windows-e2e:
+    needs: windows
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults: { run: { shell: pwsh } }
+    env: { ZL: 'D:\zl' }  # engine data (--data: one engine per data folder) + TEMP (run folders: serial.log, screenshots)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: windows-installer, path: dl }
+      - name: Install silently (/S), per-user like a friend's double-click; app, uninstaller and shortcuts must exist
+        run: |
+          Start-Process (Get-Item dl\Zero-Lab-*-windows-x64-setup.exe).FullName -ArgumentList /S -Wait
+          $inst = "$env:LOCALAPPDATA\Programs\Zero Lab"
+          $want = "$inst\zero-lab\python\python.exe", "$inst\Uninstall Zero Lab.exe",
+                  "$([Environment]::GetFolderPath('Programs'))\Zero Lab.lnk", "$([Environment]::GetFolderPath('Desktop'))\Zero Lab.lnk"
+          $missing = $want | Where-Object { -not (Test-Path $_) }
+          if ($missing) { throw "missing after install: $missing" }
+      - id: img
+        shell: bash
+        run: echo "name=$(python -c 'import sys; sys.path[:0] = ["app"]; import image; print(next(e["url"] for e in image.CATALOG if e["id"] == "desktop").rsplit("/", 1)[1])')" >> "$GITHUB_OUTPUT"
+      - id: cache
+        uses: actions/cache/restore@v4
+        with:
+          path: D:\zl\data\cache
+          key: ${{ runner.os }}-${{ steps.img.outputs.name }}
+      - name: Start the installed engine headless, run the e2e
+        run: |
+          $inst = "$env:LOCALAPPDATA\Programs\Zero Lab"
+          $data = "$env:ZL\data"
+          New-Item -ItemType Directory -Force $data, "$env:ZL\tmp" | Out-Null
+          '{"accel": "tcg", "gpu": "soft"}' | Set-Content "$data\config.json"
+          $env:TEMP = $env:TMP = "$env:ZL\tmp"
+          $engine = Start-Process "$inst\zero-lab\python\python.exe" -PassThru -NoNewWindow `
+            -ArgumentList '-X', 'utf8', "`"$inst\zero-lab\app\server.py`"", '--port', '8642', '--data', "`"$data`"" `
+            -RedirectStandardOutput "$env:ZL\tmp\engine.log" -RedirectStandardError "$env:ZL\tmp\engine-err.log"
+          foreach ($i in 1..60) {
+            try { Invoke-WebRequest http://127.0.0.1:8642/ -UseBasicParsing | Out-Null; break } catch {}
+            if ($engine.HasExited) { Get-Content "$env:ZL\tmp\engine*.log"; throw "engine exited" }
+            Start-Sleep 1
+          }
+          python tests/e2e.py --provision desktop --gpu soft --accel tcg | Tee-Object "$env:ZL\tmp\e2e.log"
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Uninstall silently; shortcuts, uninstall entry and install folder must be gone
+        run: |
+          $inst = "$env:LOCALAPPDATA\Programs\Zero Lab"
+          Get-Process | Where-Object { $_.Path -like "$inst\*" } | Stop-Process -Force  # the engine started above
+          & "$inst\Uninstall Zero Lab.exe" /S  # returns at once: NSIS reruns itself from TEMP
+          foreach ($i in 1..90) { if (-not (Test-Path $inst)) { break }; Start-Sleep 1 }
+          $left = @($inst, "$([Environment]::GetFolderPath('Programs'))\Zero Lab.lnk",
+                    "$([Environment]::GetFolderPath('Desktop'))\Zero Lab.lnk",
+                    'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Zero Lab') | Where-Object { Test-Path $_ }
+          if ($left) { throw "left behind after uninstall: $left" }
+      - id: cached
+        if: always() && steps.cache.outputs.cache-hit != 'true'
+        run: if (Test-Path "$env:ZL\data\cache\*.ok") { "ok=true" >> $env:GITHUB_OUTPUT }
+      - if: always() && steps.cached.outputs.ok == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: D:\zl\data\cache
+          key: ${{ steps.cache.outputs.cache-primary-key }}
+      - if: failure()
+        run: Get-Content "$env:ZL\tmp\e2e.log" | Where-Object { $_ -like '{*' } | Select-Object -Last 1 | Set-Content "$env:ZL\tmp\e2e.json"
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-e2e-logs
+          path: |
+            D:\zl\tmp\*.log
+            D:\zl\tmp\*.json
+            D:\zl\tmp\zl-*\*.log
+            D:\zl\tmp\zl-*\*.png
+            D:\zl\tmp\zl-*\argv.json

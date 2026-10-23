@@ -109,7 +109,7 @@ HOME=/tmp/zl-test ZL_QEMU_DIR="build/mac/Zero Lab.app/Contents/Resources/qemu" p
 python3 tests/e2e.py --url http://127.0.0.1:8660 --provision desktop --image e2e --gpu venus
 ```
 
-On Linux or Windows, use `--gpu soft --accel tcg`. For the AppImage, start it instead of `server.py`: `HOME=/tmp/zl-test ZL_IN_TERMINAL=1 ./Zero-Lab-<v>-linux-x86_64.AppImage --port 8660 &` (`ZL_IN_TERMINAL=1` keeps it from opening a terminal window). On Windows, run the installed copy's Python with `PYTHONUTF8=1`: `"%LOCALAPPDATA%\Programs\Zero Lab\zero-lab\python\python.exe" app\server.py`. GitHub's macOS runners can't use the Apple Hypervisor, so the e2e runs on real machines before a release, not in CI. CI does the same against every installed download (jobs `macos-e2e`, `appimage-e2e`, `windows-e2e`), with `--gpu soft --accel tcg`: GitHub's runners have no Apple Hypervisor and no GPU. A failed job uploads `<platform>-e2e-logs` (e2e log and JSON, engine log, serial.log, qemu.log, screenshots).
+On Linux or Windows, use `--gpu soft --accel tcg`. For the AppImage, start it instead of `server.py`: `HOME=/tmp/zl-test ZL_IN_TERMINAL=1 ./Zero-Lab-<v>-linux-x86_64.AppImage --port 8660 &` (`ZL_IN_TERMINAL=1` keeps it from opening a terminal window). On Windows, run the installed copy's Python with `PYTHONUTF8=1`: `"%LOCALAPPDATA%\Programs\Zero Lab\zero-lab\python\python.exe" app\server.py`. CI does the same against every installed download (jobs `macos-e2e`, `appimage-e2e`, `windows-e2e`), with `--gpu soft --accel tcg`: GitHub's runners have no Apple Hypervisor and no GPU. A failed job uploads `<platform>-e2e-logs` (e2e log and JSON, engine log, serial.log, qemu.log, screenshots).
 
 ## Releasing
 
