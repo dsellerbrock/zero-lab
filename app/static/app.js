@@ -196,7 +196,7 @@ function onEvent(m) {
     if (status === "booting" || status === "running") { connectScreen(); if (status === "booting") applyIdle(); }
     if (m.boot_seconds) toast(`Booted in ${m.boot_seconds} s`);
     if (state) render();
-  } else if (m.type === "serial") append($("serial"), m.data.replace(/\r/g, ""));
+  } else if (m.type === "serial") append($("serial"), m.data.replace(/\x1b\[[0-9;:?]*[A-Za-z]|\r/g, ""));  // drop colour codes
   else if (m.type === "gpio") { const first = !pins.seen; pins = { ...m, seen: true }; updateHeader(); bb.update(); if (first) applyIdle(); }
   else if (m.type === "proc") {
     if (m.line !== undefined) append($("proc"), m.line + "\n");
