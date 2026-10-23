@@ -81,6 +81,7 @@ class App:
         self.busy = None         # name of a running background job
         self.cfg = self.load_cfg()
         self.saved_at = None
+        self.downloads = Path.home() / "Downloads"  # the only place the file browser writes on this computer
 
     # ---------- config / state ----------
     def load_cfg(self):
@@ -115,6 +116,11 @@ class App:
             self._qemu = readiness.qemu_probe(vmod.qemu_paths, vmod.qemu_env)
         return readiness.check(self.host, self._qemu, self.images(), self.cfg.get("image"), self.busy,
                                shutil.disk_usage(self.data).free, image.CATALOG)
+
+    def fs(self):
+        if not self.guest or self.vm.status != "running":
+            raise RuntimeError("Boot the Pi to browse its files")
+        return guest.Files(self.guest)
 
     def paths(self):
         return {"home": str(Path.home()), "data": str(self.data), "layouts": str(self.data / "layouts"),
@@ -300,6 +306,16 @@ def make_handler(app, token, port):
             elif path == "/api/state":
                 if self.guard(True):
                     self.reply(200, app.state())
+            elif path in ("/api/fs/list", "/api/fs/home"):
+                if self.guard(True):
+                    q = parse_qs(urlparse(self.path).query)
+                    try:
+                        f = app.fs()
+                        out = {"path": f.home()} if path.endswith("home") else \
+                            f.list(q.get("path", ["/"])[0], q.get("hidden", ["0"])[0] == "1")
+                        self.reply(200, out)
+                    except (ValueError, RuntimeError, subprocess.TimeoutExpired) as e:
+                        self.reply(400, {"error": str(e)})
             elif path == "/api/readiness":
                 if self.guard(True):
                     self.reply(200, app.readiness())
@@ -383,6 +399,17 @@ def make_handler(app, token, port):
                 return
             path = urlparse(self.path).path
             length = int(self.headers.get("Content-Length") or 0)
+            if path == "/api/fs/upload":  # streamed straight into the guest, never held in memory
+                q = parse_qs(urlparse(self.path).query)
+                try:
+                    app.fs().put(q.get("path", [""])[0], self.rfile, length, q.get("overwrite", ["0"])[0] == "1")
+                    return self.reply(200, {"ok": True})
+                except FileExistsError:
+                    self.close_connection = True
+                    return self.reply(409, {"error": "exists"})
+                except (ValueError, RuntimeError, OSError) as e:
+                    self.close_connection = True
+                    return self.reply(400, {"error": str(e)})
             if length > guest.MAX_UPLOAD:
                 return self.reply(413, {"error": "too large"})
             raw = self.rfile.read(length)
@@ -441,6 +468,16 @@ def make_handler(app, token, port):
                 out = Path.home() / "Downloads" / f"{b['name']}.zerolab.json"
                 out.write_bytes(app.layout_path(b["name"]).read_bytes())
                 return {"path": str(out)}
+            elif path == "/api/fs/download":
+                return {"path": app.fs().get(b["path"], app.downloads)}
+            elif path == "/api/fs/mkdir":
+                app.fs().mkdir(b["path"])
+            elif path == "/api/fs/rename":
+                app.fs().rename(b["path"], str(b["name"]))
+            elif path == "/api/fs/delete":
+                app.fs().delete(b["path"])
+            elif path == "/api/fs/terminal":
+                app.fs().terminal(b["path"])
             elif path == "/api/reveal":
                 if b.get("what") not in app.paths() or b["what"] == "home":
                     raise ValueError("unknown location")

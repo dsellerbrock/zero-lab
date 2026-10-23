@@ -9,7 +9,9 @@ Steps: (optional) add+provision an image; boot; wait for the desktop; screenshot
 samples; stop. Prints one JSON summary line; exit status 0 only if every step passed.
 """
 import argparse
+import hashlib
 import json
+import os
 import re
 import sys
 import threading
@@ -108,6 +110,20 @@ def main():
     time.sleep(20)  # let the desktop settle before the screenshot
     shot = c.call("/api/screenshot", {})["path"]
     step("screenshot", Path(shot).exists(), path=shot)
+
+    # Files sidebar: copy a file in, list it, copy it back out, compare
+    blob = os.urandom(2 * 1024 * 1024)
+    home = c.call("/api/fs/home")["path"]
+    req = urllib.request.Request(f"{c.url}/api/fs/upload?path={home}/zl-e2e/blob.bin", data=blob, method="POST",
+                                 headers={"X-Zero-Lab-Token": c.token})
+    urllib.request.urlopen(req, timeout=120).read()
+    listed = c.call(f"/api/fs/list?path={home}/zl-e2e")["entries"]
+    step("files:upload+list", any(e["name"] == "blob.bin" and e["size"] == len(blob) for e in listed), entries=listed)
+    out = c.call("/api/fs/download", {"path": f"{home}/zl-e2e/blob.bin"})["path"]
+    same = hashlib.sha256(Path(out).read_bytes()).hexdigest() == hashlib.sha256(blob).hexdigest()
+    step("files:download-sha256", same, path=out)
+    Path(out).unlink()
+    c.call("/api/fs/delete", {"path": f"{home}/zl-e2e"})
 
     def run_sample(sample):
         d = ROOT / "samples" / sample

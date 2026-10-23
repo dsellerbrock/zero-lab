@@ -4,6 +4,7 @@ Dropped-in files are only ever packed into a tar here; they are unpacked, built 
 inside the guest by guest/run-project.sh. Nothing from a project executes on the host.
 """
 import io
+import json
 import subprocess
 import tarfile
 import threading
@@ -100,3 +101,144 @@ class Guest:
 
     def poweroff(self):
         self.sh("sudo systemctl poweroff --no-block", timeout=15)
+
+
+# ---------- file browser (the Files sidebar) ----------
+import os  # noqa: E402
+import posixpath  # noqa: E402
+import shlex  # noqa: E402
+
+LIST_PY = r"""
+import json, os, sys
+p, hidden = sys.argv[1], sys.argv[2] == "1"
+out = []
+try:
+    with os.scandir(p) as it:
+        for e in it:
+            if not hidden and e.name.startswith("."):
+                continue
+            try:
+                st = e.stat(follow_symlinks=False)
+                d = e.is_dir(follow_symlinks=True)
+            except OSError:
+                continue
+            out.append({"name": e.name, "dir": d, "link": e.is_symlink(), "size": st.st_size, "mtime": int(st.st_mtime)})
+    print(json.dumps({"path": os.path.abspath(p), "entries": out}))
+except OSError as e:
+    print(json.dumps({"error": e.strerror or str(e)}))
+"""
+
+
+def guest_path(p):
+    """A guest path from the UI -> normalised absolute POSIX path. Rejects relative paths and control chars."""
+    if not isinstance(p, str) or not p.startswith("/") or any(c in p for c in "\0\n\r"):
+        raise ValueError("path must be an absolute path on the Pi")
+    return posixpath.normpath(p) if p != "/" else "/"
+
+
+def download_name(name, folder=False):
+    """A guest file/folder name -> a safe single file name for ~/Downloads."""
+    base = posixpath.basename(name.rstrip("/")) or "pi-root"
+    base = "".join(c for c in base if c not in '/\\\0:*?"<>|').strip(". ") or "download"
+    return base + (".tar.gz" if folder else "")
+
+
+def open_exclusive(folder, name):
+    """Create folder/name without following symlinks or overwriting; adds ' (2)', ' (3)'... on clashes."""
+    stem, dot, ext = name.partition(".") if not name.startswith(".") else (name, "", "")
+    for n in range(1, 1000):
+        cand = name if n == 1 else f"{stem} ({n}){dot}{ext}"
+        path = os.path.join(folder, cand)
+        try:
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o644)
+            return os.fdopen(fd, "wb"), path
+        except FileExistsError:
+            continue
+    raise OSError("too many files with that name in Downloads")
+
+
+class Files:
+    """Guest file operations over the same loopback SSH, as the Pi user."""
+
+    def __init__(self, guest):
+        self.g = guest
+
+    def run(self, cmd, stdin=b"", timeout=60):
+        return self.g.sh(cmd, stdin, timeout)
+
+    def list(self, path, hidden=False):
+        out = json.loads(self.run(f"python3 -c {shlex.quote(LIST_PY)} {shlex.quote(guest_path(path))} {int(hidden)}"))
+        if "error" in out:
+            raise ValueError(out["error"])
+        out["entries"].sort(key=lambda e: (not e["dir"], e["name"].lower()))
+        return out
+
+    def home(self):
+        return self.run("printf %s \"$HOME\"").decode()
+
+    def exists(self, path):
+        return self.run(f"test -e {shlex.quote(guest_path(path))} && echo y || true").strip() == b"y"
+
+    def mkdir(self, path):
+        self.run(f"mkdir -p -- {shlex.quote(guest_path(path))}")
+
+    def rename(self, path, new_name):
+        if not new_name or "/" in new_name or new_name in (".", ".."):
+            raise ValueError("a new name cannot contain /")
+        src = guest_path(path)
+        dst = posixpath.join(posixpath.dirname(src), new_name)
+        self.run(f"test ! -e {shlex.quote(dst)} && mv -- {shlex.quote(src)} {shlex.quote(dst)}")
+
+    def delete(self, path):
+        p = guest_path(path)
+        if p in ("/", "/home", "/root", "/boot", "/usr", "/etc", "/bin", "/lib", "/var"):
+            raise ValueError("refusing to delete a system folder")
+        self.run(f"rm -rf -- {shlex.quote(p)}")
+
+    def put(self, path, reader, length, overwrite=False):
+        """Stream `length` bytes from reader into a guest file (parent folders created)."""
+        p = guest_path(path)
+        tmp = p + ".zl-part"
+        cmd = (f"mkdir -p -- {shlex.quote(posixpath.dirname(p))} && "
+               + ("" if overwrite else f"test ! -e {shlex.quote(p)} && ")
+               + f"cat > {shlex.quote(tmp)} && mv -f -- {shlex.quote(tmp)} {shlex.quote(p)}")
+        proc = subprocess.Popen(self.g.ssh_argv(cmd), stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        left = length
+        try:
+            while left > 0:
+                chunk = reader.read(min(1 << 20, left))
+                if not chunk:
+                    break
+                proc.stdin.write(chunk)
+                left -= len(chunk)
+            proc.stdin.close()
+        except BrokenPipeError:
+            pass
+        err = proc.stderr.read().decode(errors="replace").strip()
+        if proc.wait() or left:
+            if not overwrite and not err:
+                raise FileExistsError(p)
+            raise RuntimeError(err or "upload interrupted")
+
+    def get(self, path, downloads):
+        """Stream a guest file (or a folder as .tar.gz) into the downloads folder. -> host path."""
+        p = guest_path(path)
+        is_dir = self.run(f"test -d {shlex.quote(p)} && echo d || true").strip() == b"d"
+        cmd = (f"tar -czf - -C {shlex.quote(posixpath.dirname(p) or '/')} -- {shlex.quote(posixpath.basename(p))}"
+               if is_dir else f"cat -- {shlex.quote(p)}")
+        os.makedirs(downloads, exist_ok=True)
+        out, host_path = open_exclusive(downloads, download_name(p, is_dir))
+        with out:
+            proc = subprocess.Popen(self.g.ssh_argv(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            while chunk := proc.stdout.read(1 << 20):
+                out.write(chunk)
+            err = proc.stderr.read().decode(errors="replace").strip()
+        if proc.wait():
+            os.unlink(host_path)
+            raise RuntimeError(err or "download failed")
+        return host_path
+
+    def terminal(self, path):
+        p = guest_path(path)
+        self.run("export XDG_RUNTIME_DIR=/run/user/$(id -u) WAYLAND_DISPLAY=wayland-0 DISPLAY=:0; "
+                 f"setsid -f lxterminal --working-directory={shlex.quote(p)} >/dev/null 2>&1 < /dev/null")

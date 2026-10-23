@@ -1,5 +1,6 @@
 import RFB from "./novnc/core/rfb.js";
 import { breadboard } from "./widgets.js";
+import { filesPanel } from "./files.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -301,8 +302,12 @@ bb.load({ version: 1, widgets: [ // matches samples/button-led-*
   { type: "led", x: 196, y: 24, label: "LED", pins: [27], color: "#ff3b30" },
 ] });
 
+// ---------- Files sidebar ----------
+const files = filesPanel({ $, api, toast, esc, tilde: (p) => tilde(p), token: T });
+
 // ---------- render ----------
 function render() {
+  files.status(status);
   renderSummary(); renderSettings(); updateControls(); renderScreen();
   if (!$("setup").hidden && !state.busy) renderSetup();
   const ll = $("layout-list"), names = state.layouts;

@@ -256,6 +256,60 @@ class PngTest(unittest.TestCase):
         self.assertEqual(zlib.decompress(idat), b"\0" + bytes([255, 0, 0, 0, 255, 0]))
 
 
+class FilesTest(unittest.TestCase):
+    def test_guest_path(self):
+        self.assertEqual(guest.guest_path("/home/pi/../pi/x"), "/home/pi/x")
+        self.assertEqual(guest.guest_path("/"), "/")
+        for bad in ("home/pi", "", "/a\nb", "/a\0b", None):
+            with self.assertRaises(ValueError):
+                guest.guest_path(bad)
+
+    def test_download_names(self):
+        self.assertEqual(guest.download_name("/home/pi/notes.txt"), "notes.txt")
+        self.assertEqual(guest.download_name("/home/pi/proj/", folder=True), "proj.tar.gz")
+        self.assertEqual(guest.download_name("/"), "pi-root")
+        self.assertEqual(guest.download_name('/x/a:b*?.txt'), "ab.txt")
+
+    def test_open_exclusive_never_follows_or_overwrites(self):
+        d = Path(tempfile.mkdtemp())
+        outside = Path(tempfile.mkdtemp()) / "target"
+        (d / "a.txt").write_text("keep")
+        os.symlink(outside, d / "b.txt")
+        f, p = guest.open_exclusive(str(d), "a.txt")
+        f.close()
+        self.assertEqual(Path(p).name, "a (2).txt")
+        self.assertEqual((d / "a.txt").read_text(), "keep")
+        f, p = guest.open_exclusive(str(d), "b.txt")
+        f.close()
+        self.assertEqual(Path(p).name, "b (2).txt")
+        self.assertFalse(outside.exists())
+
+
+class FakeFiles:
+    def __init__(self):
+        self.put_bytes, self.calls = b"", []
+
+    def list(self, path, hidden=False):
+        return {"path": path, "entries": [{"name": "a", "dir": True, "link": False, "size": 0, "mtime": 0}]}
+
+    def home(self):
+        return "/home/pi"
+
+    def put(self, path, reader, length, overwrite=False):
+        if path.endswith("exists.txt") and not overwrite:
+            reader.read(length)
+            raise FileExistsError(path)
+        self.put_bytes = reader.read(length)
+        self.calls.append(("put", path))
+
+    def get(self, path, downloads):
+        self.calls.append(("get", path, str(downloads)))
+        return str(downloads / "x")
+
+    def __getattr__(self, name):  # mkdir, rename, delete, terminal
+        return lambda *a: self.calls.append((name, *a))
+
+
 class ServerTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -309,6 +363,39 @@ class ServerTest(unittest.TestCase):
         self.assertEqual({x["id"] for x in r["rows"]}, {"qemu", "accel", "gpu", "image", "kernel", "user", "disk"})
         self.assertFalse(r["ready"])  # empty data dir: no image
         self.assertEqual(self.req("GET", "/api/readiness")[0], 403)
+
+    def test_files_need_running_pi(self):
+        code, body = self.req("GET", "/api/fs/list?path=/home/pi", token="tok")
+        self.assertEqual(code, 400)
+        self.assertIn(b"Boot the Pi", body)
+
+    def test_files_endpoints(self):
+        fake = FakeFiles()
+        self.app.fs = lambda: fake
+        try:
+            self.assertEqual(json.loads(self.req("GET", "/api/fs/list?path=/home/pi", token="tok")[1])["entries"][0]["name"], "a")
+            self.assertEqual(self.req("GET", "/api/fs/list?path=/home/pi")[0], 403)
+            payload = os.urandom(3 * 1024 * 1024)  # streamed in chunks
+            c = http.client.HTTPConnection("127.0.0.1", self.port)
+            c.request("POST", "/api/fs/upload?path=/home/pi/blob.bin", body=payload,
+                      headers={"Host": f"127.0.0.1:{self.port}", "X-Zero-Lab-Token": "tok"})
+            self.assertEqual(c.getresponse().status, 200)
+            c.close()
+            self.assertEqual(fake.put_bytes, payload)
+            c = http.client.HTTPConnection("127.0.0.1", self.port)
+            c.request("POST", "/api/fs/upload?path=/home/pi/exists.txt", body=b"x",
+                      headers={"Host": f"127.0.0.1:{self.port}", "X-Zero-Lab-Token": "tok"})
+            self.assertEqual(c.getresponse().status, 409)
+            c.close()
+            self.assertEqual(self.req("POST", "/api/fs/upload?path=/x", body={})[0], 403)  # no token
+            code, body = self.req("POST", "/api/fs/download", token="tok", body={"path": "/home/pi/a"})
+            self.assertEqual(code, 200)
+            self.assertEqual(fake.calls[-1][2], str(self.app.downloads))
+            for ep, b in (("mkdir", {"path": "/home/pi/n"}), ("rename", {"path": "/home/pi/a", "name": "b"}),
+                          ("delete", {"path": "/home/pi/b"}), ("terminal", {"path": "/home/pi"})):
+                self.assertEqual(self.req("POST", f"/api/fs/{ep}", token="tok", body=b)[0], 200)
+        finally:
+            del self.app.fs
 
     def test_reveal_only_known_places(self):
         self.assertEqual(self.req("POST", "/api/reveal", token="tok", body={"what": "/etc/passwd"})[0], 400)

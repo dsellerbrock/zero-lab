@@ -99,7 +99,9 @@ def build_argv(qemu, cfg, img, run, ports, mode="desktop"):
     append += ["systemd.mask=wayvnc.service", "systemd.mask=wayvnc-control.service",
                "systemd.mask=vncserver-virtuald.service", "systemd.mask=systemd-networkd-wait-online.service",
                # raspi-zero2w 053bc65: a slow DHCP lease otherwise holds the desktop back to 84-107 s
-               "systemd.mask=NetworkManager-wait-online.service"]
+               "systemd.mask=NetworkManager-wait-online.service",
+               # no EEPROM in QEMU, and fstrim over the SD path costs minutes on first boot
+               "systemd.mask=rpi-eeprom-update.service", "systemd.mask=fstrim.service", "systemd.mask=fstrim.timer"]
     if mode == "desktop":
         append += ["systemd.show_status=false", "systemd.unit=kernel-command-line.target",
                    "systemd.run=\"/bin/sh -c 'tr -d \\\\000 < /proc/device-tree/chosen/zl-setup"

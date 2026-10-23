@@ -24,6 +24,32 @@
 </header>
 
 <main class="bench">
+  <aside id="files" class="files" aria-labelledby="files-title">
+    <button id="fs-toggle" class="rail" type="button" aria-controls="fs-panel" aria-expanded="false">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 3.5h5l1.5 1.5h6.5v8h-13z" fill="currentColor"/></svg>
+      <span class="rail-label">Files</span>
+    </button>
+    <div id="fs-panel" class="fs-panel">
+      <h2 id="files-title">Files on the Pi</h2>
+      <p id="fs-off" class="note">Boot the Pi to browse its files.</p>
+      <div id="fs-on" hidden>
+        <nav id="fs-crumbs" class="crumbs" aria-label="Folder path"></nav>
+        <div class="fs-tools" role="toolbar" aria-label="File actions">
+          <button id="fs-up" type="button" aria-label="Up one folder" title="Up one folder">↑</button>
+          <button id="fs-home" type="button" aria-label="Home folder" title="Home folder">⌂</button>
+          <button id="fs-refresh" type="button" aria-label="Refresh" title="Refresh">⟳</button>
+          <button id="fs-mkdir" type="button">New folder</button>
+          <button id="fs-upload" type="button">Upload</button>
+          <button id="fs-term" type="button" title="Open a terminal on the Pi's desktop in this folder">Terminal here</button>
+          <label class="check small"><input type="checkbox" id="fs-hidden"> Hidden files</label>
+          <input id="fs-pick" type="file" multiple hidden>
+        </div>
+        <ul id="fs-list" class="fs-list" role="listbox" aria-label="Folder contents"></ul>
+        <div id="fs-progress" class="fs-progress" role="status" aria-live="polite" hidden></div>
+        <p class="note">Drop files or folders here to copy them into the Pi. Downloads go to <code>~/Downloads</code>.</p>
+      </div>
+    </div>
+  </aside>
   <section class="monitor" aria-label="The Pi">
     <div id="screen" class="screen">
       <p id="screen-msg" class="screen-msg"></p>
@@ -171,6 +197,12 @@
     <footer class="drawer-foot">
       <p class="where"><span id="saved-state">Changes save automatically</span> to <code id="config-path"></code> <button class="link" data-reveal="config" type="button">Show</button></p>
     </footer>
+  </form>
+</dialog>
+<dialog id="confirm-dlg" class="confirm" aria-labelledby="confirm-text">
+  <form method="dialog">
+    <p id="confirm-text"></p>
+    <div class="row"><button id="confirm-cancel" class="btn" value="cancel">Cancel</button><button id="confirm-ok" class="btn halt" value="ok">OK</button></div>
   </form>
 </dialog>
 <div id="toast" role="status" aria-live="polite"></div>
