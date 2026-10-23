@@ -18,8 +18,11 @@ if [ ! -f "$q" ]; then
   # QEMU's own script: the tree at the commit plus the meson subprojects it builds with.
   tmp=$(mktemp -d); git clone -q --no-checkout "$QEMU_REPO" "$tmp/qemu"
   git -C "$tmp/qemu" checkout -q "$ZL_QEMU_COMMIT"
+  touch "$tmp/qemu.tar"  # the script realpath()s its output first; BSD realpath needs it to exist
   (cd "$tmp/qemu" && scripts/archive-source.sh "$tmp/qemu.tar")
-  xz -T3 -9 -c "$tmp/qemu.tar" > "$q"; rm -rf "$tmp"
+  # archive-source.sh writes paths without a top-level directory; add one, as release tarballs have
+  mkdir "$tmp/qemu-zero-lab-$short" && tar -xf "$tmp/qemu.tar" -C "$tmp/qemu-zero-lab-$short"
+  tar -C "$tmp" -cf - "qemu-zero-lab-$short" | xz -T3 -9 > "$q"; rm -rf "$tmp"
 fi
 cp "$q" "$OUT/"
 for pair in "virglrenderer:$VIRGL_SRC" "libepoxy:$EPOXY_SRC"; do

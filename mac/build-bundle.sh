@@ -26,6 +26,7 @@ MOLTENVK=${ZL_MOLTENVK:-$PROJECTS/a6-virgl-stack/prefix-venus/lib/libMoltenVK.dy
 PCRE2_URL=https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.49/pcre2-10.49.tar.bz2
 PCRE2_SHA=53c156e1ba416a20da8e65395daa132da0d80e76910424caca3fcdae7831d384
 PY_URL=https://github.com/astral-sh/python-build-standalone/releases/download/20251014/cpython-3.12.12+20251014-aarch64-apple-darwin-install_only_stripped.tar.gz
+PY_SHA=84cb7acbf75264982c8bdd818bfa1ff0f1eb76007b48a5f3e01d28633b46afdf
 APP="$B/Zero Lab.app"
 mkdir -p "$B" "$DEPS"
 export PKG_CONFIG_PATH="$DEPS/lib/pkgconfig:$(brew --prefix)/lib/pkgconfig"
@@ -75,8 +76,8 @@ qemu() {
       --disable-libssh --disable-libusb --disable-usb-redir --disable-vnc-jpeg --disable-png \
       --disable-vnc-sasl --disable-zstd --disable-capstone --disable-docs --disable-guest-agent \
       --disable-spice --disable-curses --disable-coreaudio --disable-dbus-display --disable-vmnet \
-      --disable-libudev --disable-bzip2 --disable-lzo --disable-snappy --disable-linux-io-uring \
-      >/dev/null)
+      --disable-libudev --disable-bzip2 --disable-lzo --disable-snappy --disable-linux-io-uring --disable-pvg \
+      | tail -n 40)
   # Call ninja directly: macOS make 3.81 passes -j in a form ninja ignores (it would use every core).
   ninja -C "$B/qemu-build" -j$JOBS install >/dev/null
   echo "qemu ok: $("$B/qemu-install/bin/qemu-system-aarch64" --version | head -1)"
@@ -99,7 +100,7 @@ app() {
   # app code
   rsync -a --exclude __pycache__ "$ROOT/app/" "$R/app/"
   # python (relocatable CPython build; PSF licence)
-  fetch "$PY_URL" "" "$B/python.tar.gz"
+  fetch "$PY_URL" "$PY_SHA" "$B/python.tar.gz"
   tar -xzf "$B/python.tar.gz" -C "$R"
   rm -rf "$R/python/lib/python3.12/test" "$R/python/lib/python3.12/idlelib" "$R/python/lib/python3.12/tkinter" \
          "$R/python/lib/python3.12/ensurepip" "$R/python/lib/tcl"* "$R/python/lib/tk"* "$R/python/lib/itcl"* \
