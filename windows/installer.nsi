@@ -1,4 +1,4 @@
-; Zero Lab for Windows: a per-user install wizard (no admin), built by tools/make-windows-bundle.sh:
+; Zero Lab for Windows: a per-user install wizard (no admin), built by tools/make-windows-installer.sh:
 ;   makensis -DVERSION=<v> -DSTAGE=<dir> -DOUTFILE=<setup.exe> windows/installer.nsi
 ; STAGE holds "Zero Lab.cmd", icon.ico, LICENSE.txt and zero-lab\ (app, samples, kernel, qemu, python).
 ; The Pi's disk images and layouts live in %LOCALAPPDATA%\Zero Lab, which an uninstall keeps unless asked.
