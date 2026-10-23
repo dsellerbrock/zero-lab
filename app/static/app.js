@@ -143,6 +143,7 @@ function renderSettings() {
   $("network").checked = c.network; $("snapshot").checked = c.snapshot;
   $("config-path").textContent = tilde(state.paths.config);
   $("layouts-path").textContent = tilde(state.paths.layouts);
+  $("cache-path").textContent = tilde(state.paths.cache);
 }
 async function saveCfg() {
   state = await api("/api/config", { ram: +$("ram").value, cpus: +$("cpus").value, accel: $("accel").value,

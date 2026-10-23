@@ -68,25 +68,62 @@ def sha256_file(path, progress=None):
 
 
 def download(entry, dest, progress):
-    """Stream the .xz, hashing as it arrives; refuse it if the hash is not the pinned one."""
+    """Stream the .xz into dest, resuming a partial file; refuse it unless the sha256 is the pinned one."""
     h, done = hashlib.sha256(), 0
-    with urllib.request.urlopen(entry["url"], timeout=60) as r, open(dest, "wb") as out:
-        while chunk := r.read(1 << 20):
-            h.update(chunk)
-            out.write(chunk)
-            done += len(chunk)
-            progress("download", done, entry["size"])
+    if dest.exists():  # an interrupted download: hash what we have and ask for the rest
+        with open(dest, "rb") as f:
+            while chunk := f.read(1 << 20):
+                h.update(chunk)
+                done += len(chunk)
+    if done < entry["size"]:
+        req = urllib.request.Request(entry["url"], headers={"Range": f"bytes={done}-"} if done else {})
+        with urllib.request.urlopen(req, timeout=60) as r:
+            if done and r.status != 206:  # server ignored the range: start over
+                h, done = hashlib.sha256(), 0
+            with open(dest, "ab" if done else "wb") as out:
+                while chunk := r.read(1 << 20):
+                    h.update(chunk)
+                    out.write(chunk)
+                    done += len(chunk)
+                    progress("download", done, entry["size"])
     if h.hexdigest() != entry["sha256"]:
         dest.unlink()
         raise ValueError("download checksum mismatch; try again")
 
 
 def decompress(src, dest, progress):
-    total, done = src.stat().st_size, 0
+    """Unpack .xz -> sparse raw image: all-zero blocks are skipped, not written (faster, less disk)."""
+    total, size = src.stat().st_size, 0
+    zero = bytes(1 << 20)
     with open(src, "rb") as raw, lzma.open(raw) as f, open(dest, "wb") as out:
         while chunk := f.read(1 << 20):
-            out.write(chunk)
+            if chunk == zero[:len(chunk)]:
+                out.seek(len(chunk), 1)
+            else:
+                out.write(chunk)
+            size += len(chunk)
             progress("decompress", raw.tell(), total)
+        out.truncate(size)
+
+
+def cached_image(entry, cache, progress):
+    """Download and unpack an official image once; later setups clone the clean copy instantly."""
+    cache.mkdir(parents=True, exist_ok=True)
+    name = Path(entry["url"]).name  # e.g. 2026-10-06-raspios-trixie-arm64.img.xz
+    pristine, ok = cache / name.removesuffix(".xz"), cache / (name.removesuffix(".xz") + ".ok")
+    if pristine.exists() and ok.exists():
+        progress("download", 1, 1)
+        progress("decompress", 1, 1)
+        return pristine
+    xz = cache / name
+    download(entry, xz, progress)
+    tmp = pristine.with_suffix(".part")
+    decompress(xz, tmp, progress)
+    tmp.chmod(0o444)
+    tmp.rename(pristine)
+    ok.write_text(entry["sha256"])
+    xz.unlink()  # the unpacked copy is what setups use; the .xz is only needed until then
+    return pristine
 
 
 def clone(src, dest):
@@ -167,13 +204,13 @@ def prepare(source, imgdir, user, password, qemu_img, progress):
     base = imgdir / "base.img"
     entry = next((e for e in CATALOG if e["id"] == source), None)
     if entry:
-        need = entry["size"] * 6  # xz + decompressed image + headroom
-        if shutil.disk_usage(imgdir).free < need:
-            raise ValueError(f"need about {need >> 30} GB free disk space")
-        xz = imgdir / "download.img.xz"
-        download(entry, xz, progress)
-        decompress(xz, base, progress)
-        xz.unlink()
+        cache = imgdir.parent.parent / "cache"
+        if not (cache / (Path(entry["url"]).name.removesuffix(".xz") + ".ok")).exists():
+            need = entry["size"] * 6  # xz + decompressed image + headroom
+            if shutil.disk_usage(imgdir).free < need:
+                raise ValueError(f"need about {need >> 30} GB free disk space")
+        clone(cached_image(entry, cache, progress), base)
+        base.chmod(0o644)  # the clone gets this image's user-data; the cached copy stays clean
     else:
         src = Path(source).expanduser()
         if not src.is_file():

@@ -125,6 +125,7 @@ class App:
 
     def paths(self):
         return {"home": str(Path.home()), "data": str(self.data), "layouts": str(self.data / "layouts"),
+                "cache": str(self.data / "cache"),
                 "config": str(self.data / "config.json"), "downloads": str(Path.home() / "Downloads")}
 
     def reveal(self, what):

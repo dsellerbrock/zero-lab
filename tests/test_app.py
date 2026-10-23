@@ -243,6 +243,49 @@ class ReadinessTest(unittest.TestCase):
         self.assertTrue(text)
 
 
+class CacheTest(unittest.TestCase):
+    def test_sparse_decompress(self):
+        import lzma
+        d = Path(tempfile.mkdtemp())
+        data = b"boot" + bytes(5 << 20) + b"root"
+        (d / "a.img.xz").write_bytes(lzma.compress(data))
+        image.decompress(d / "a.img.xz", d / "a.img", lambda *a: None)
+        self.assertEqual((d / "a.img").read_bytes(), data)
+
+    def test_download_resumes_and_cache_is_reused(self):
+        import functools
+        import hashlib
+        import http.server
+        import lzma
+        payload = lzma.compress(b"pi" + bytes(1 << 20))
+        hits = []
+
+        class H(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_GET(self):
+                start = int(self.headers.get("Range", "bytes=0-")[6:-1] or 0)
+                hits.append(start)
+                self.send_response(206 if start else 200)
+                self.end_headers()
+                self.wfile.write(payload[start:])
+
+        srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        entry = {"url": f"http://127.0.0.1:{srv.server_address[1]}/t.img.xz", "size": len(payload),
+                 "sha256": hashlib.sha256(payload).hexdigest()}
+        cache = Path(tempfile.mkdtemp())
+        (cache / "t.img.xz").write_bytes(payload[:100])  # an interrupted download
+        p = image.cached_image(entry, cache, lambda *a: None)
+        self.assertEqual(hits, [100])
+        self.assertEqual(p.read_bytes()[:2], b"pi")
+        self.assertFalse((cache / "t.img.xz").exists())
+        image.cached_image(entry, cache, lambda *a: None)  # second setup: no network at all
+        self.assertEqual(hits, [100])
+        srv.shutdown()
+
+
 class SerialTest(unittest.TestCase):
     def test_colour_codes_split_across_chunks(self):
         out, carry = vm.clean_serial("", "Welcome to \x1b[1mDebian\x1b[0;3")
