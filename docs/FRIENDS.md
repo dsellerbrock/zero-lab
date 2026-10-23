@@ -13,13 +13,13 @@ Zero Lab runs a virtual Raspberry Pi Zero 2 W. You can boot it, use its desktop,
 This is the fast version: the Pi's CPU runs on your Mac's own cores (Apple Hypervisor), and its graphics use your Mac's GPU (Vulkan through Metal).
 
 ### Windows 10/11 (64-bit)
-1. Right-click `Zero-Lab-…-windows-x64.zip` and choose **Extract All…**. Zero Lab can't run from inside the zip.
-2. Open the extracted folder (and the `Zero-Lab-…` folder inside it), then double-click **Zero Lab** (`Zero Lab.cmd`). If Windows says it protected your PC, click **More info → Run anyway**: Zero Lab is free software without a paid code-signing certificate.
-3. It opens in your web browser. Closing the small black window stops the Pi.
+1. Double-click `Zero-Lab-…-windows-x64-setup.exe`. Windows SmartScreen may say "Windows protected your PC": click **More info**, then **Run anyway**. Zero Lab is free software without a paid code-signing certificate.
+2. Click through the wizard: it shows the licence, installs into `%LOCALAPPDATA%\Programs\Zero Lab` (no administrator password), and adds **Zero Lab** to the Start menu and your desktop.
+3. Leave **Launch Zero Lab** ticked and click **Finish**. Zero Lab opens in your web browser. A small black window sits in the taskbar; closing it stops the Pi.
 
-Nothing is installed: Zero Lab keeps its disk images and settings in `%LOCALAPPDATA%\Zero Lab`. To remove it, delete the folder you extracted and that one.
+Your Pi's disk images and layouts live in `%LOCALAPPDATA%\Zero Lab`. To uninstall, use **Settings → Apps → Installed apps → Zero Lab**; it keeps that data unless you tick **Also remove my Pi data**.
 
-If it won't start on your PC, the older installer still works: unzip `Zero-Lab-…-linux-windows.zip` and double-click **Install Zero Lab (Windows).cmd**. It sets up WSL2 and Ubuntu (Windows asks for permission and may need a restart; afterwards, double-click it again), then builds Zero Lab in 10–40 minutes.
+If Zero Lab won't run on your PC, the older installer still works: unzip `Zero-Lab-…-linux-windows.zip` and double-click **Install Zero Lab (Windows).cmd**. It sets up WSL2 and Ubuntu (Windows asks for permission and may need a restart; afterwards, double-click it again), then builds Zero Lab in 10–40 minutes.
 
 ### Linux (Debian/Ubuntu, Fedora, Arch)
 1. Unzip `Zero-Lab-…-linux-windows.zip`.
@@ -53,4 +53,4 @@ Drop a file, folder or `.zip` on **Your code**, then click **Build & run**. Outp
 - Or pick a ready-made example under **Samples** and press **Load**: its code is staged and its parts appear on the breadboard. Then **Build & run**. With `button-led-py`, press the Button widget and the LED widget lights.
 
 ## Licences
-Zero Lab is free software under the GNU GPL v2 or later. It includes QEMU (GPL-2.0), a Linux kernel for the Pi (GPL-2.0; its source is the `kernel-source` download next to the app) and other components listed in `THIRD-PARTY.md`. The complete source code is in the **Source code (GPL)** folder (on the Mac disk image) or the `sources` / **Source code (GPL)** folder (in the zips), and online at https://github.com/dsellerbrock/zero-lab and https://github.com/dsellerbrock/qemu-raspi-zero2w. Raspberry Pi OS is downloaded from raspberrypi.com under its own licences and is not included. Raspberry Pi is a trademark of Raspberry Pi Ltd. Zero Lab is not affiliated with them.
+Zero Lab is free software under the GNU GPL v2 or later. It includes QEMU (GPL-2.0), a Linux kernel for the Pi (GPL-2.0; its source is the `kernel-source` download next to the app) and other components listed in `THIRD-PARTY.md`. The complete source code is in the **Source code (GPL)** folder (on the Mac disk image) or the `sources` folder (in the Linux zip), or the `…-windows-x64-sources.zip` download next to the Windows installer, and online at https://github.com/dsellerbrock/zero-lab and https://github.com/dsellerbrock/qemu-raspi-zero2w. Raspberry Pi OS is downloaded from raspberrypi.com under its own licences and is not included. Raspberry Pi is a trademark of Raspberry Pi Ltd. Zero Lab is not affiliated with them.
