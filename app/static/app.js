@@ -169,10 +169,24 @@ function connectScreen() {
 function disconnectScreen() { if (rfb) { const r = rfb; rfb = null; r.disconnect(); } }
 
 // ---------- events ----------
+// Console output arrives in hundreds of small chunks per second while the Pi boots. Rewriting a large
+// <pre> per chunk freezes the page, so chunks are queued and appended at most every 100 ms.
+const pending = new Map();
 function append(el, text) {
-  const stick = el.scrollTop + el.clientHeight >= el.scrollHeight - 4;
-  el.textContent = (el.textContent + text).slice(-100000);
-  if (stick) el.scrollTop = el.scrollHeight;
+  pending.set(el, (pending.get(el) || "") + text);
+  if (!append.timer) append.timer = setTimeout(flushConsoles, 100);
+}
+function flushConsoles() {
+  append.timer = null;
+  for (const [el, text] of pending) {
+    const stick = el.scrollTop + el.clientHeight >= el.scrollHeight - 4;
+    if (!el.firstChild) el.append(document.createTextNode(""));
+    const node = el.firstChild;
+    node.appendData(text);
+    if (node.length > 120000) node.deleteData(0, node.length - 80000);  // keep the last ~80 KB
+    if (stick && !el.hidden) el.scrollTop = el.scrollHeight;
+  }
+  pending.clear();
 }
 function onEvent(m) {
   if (m.type === "status") {
@@ -189,6 +203,7 @@ function onEvent(m) {
     else if (m.state === "running") { $("proc").textContent = ""; selectTab("code"); }
     else if (m.state === "exited") append($("proc"), `\n[the program exited with status ${m.code}]\n`);
   } else if (m.type === "provision") {
+    if (m.stage !== refreshReady.stage) { refreshReady.stage = m.stage; refreshReady(); }
     if (m.stage === "error") {
       $("setup-error").textContent = `Setup stopped: ${m.error}`; $("setup-error").hidden = false;
       $("img-add").disabled = false; $("progress").hidden = true;
@@ -339,6 +354,10 @@ async function refresh() {
 }
 
 // ---------- readiness stop light ----------
+function refreshReady() {
+  api("/api/state").then((st) => { state = st; return api("/api/readiness"); })
+    .then((r) => { ready = r; renderReadiness(); updateControls(); renderSummary(); }).catch(() => {});
+}
 const readyDlg = $("ready-dlg");
 $("ready-btn").onclick = () => readyDlg.showModal();
 document.querySelectorAll("[data-open-ready]").forEach((b) => (b.onclick = () => readyDlg.showModal()));
