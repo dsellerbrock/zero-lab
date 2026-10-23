@@ -5,8 +5,9 @@
 #   tools/make-appimage.sh      on a Linux x86_64 host with podman or docker; the build runs in ubuntu:22.04
 #                               (glibc 2.35), so the AppImage runs on that and anything newer.
 #
-# Input: build/appimage/gpl-sources/ from tools/source-bundle.sh (made here if missing). QEMU and virglrenderer
-# are built from exactly those tarballs, so the shipped source is the source of the binaries.
+# Needs only this checkout and kernel/kernel8-virtio.img (kernel/build.sh, or CI's `kernel` artifact). Every other
+# input comes from a pinned URL: QEMU and virglrenderer at the tools/pins.sh commits, packed by tools/source-bundle.sh
+# and built from exactly those tarballs (so the shipped source is the source of the binaries); the rest below (sha256).
 # Output in build/appimage/: Zero-Lab-<V>-linux-x86_64.AppImage and Zero-Lab-<V>-linux-x86_64-source.tar
 # (that bundle plus the Ubuntu sources of every bundled library).
 set -euo pipefail
@@ -14,7 +15,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 B="$ROOT/build/appimage"
 SRC="$B/gpl-sources"
 JOBS=${ZL_JOBS:-4}
-IMAGE=docker.io/library/ubuntu:22.04
+IMAGE=docker.io/library/ubuntu:22.04@sha256:0a9887931b0e38af2e3487ed39e29436b0535c4f3f52e57745baaf79d1898956
 PY_URL=https://github.com/astral-sh/python-build-standalone/releases/download/20251014/cpython-3.12.12+20251014-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz
 PY_SHA=c74addcd1b033a6e4d60ead3ab47fcc995569027e01d3061c4a934f363c4a0cf
 TOOL_URL=https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
@@ -33,7 +34,6 @@ outside() {
   [ "$(uname -sm)" = "Linux x86_64" ] || { echo "run this on Linux x86_64 (the Mac build is mac/build-bundle.sh)" >&2; exit 2; }
   local engine; engine=$(command -v podman || command -v docker) || { echo "needs podman or docker" >&2; exit 2; }
   [ -f "$ROOT/kernel/kernel8-virtio.img" ] || { echo "kernel/kernel8-virtio.img missing (kernel/build.sh)" >&2; exit 2; }
-  ls "$SRC"/qemu-zero-lab-*.tar.xz >/dev/null 2>&1 || "$ROOT/tools/source-bundle.sh" "$SRC"
   mkdir -p "$B"
   "$engine" run --rm -v "$ROOT:/zl" -e ZL_JOBS="$JOBS" "$IMAGE" bash /zl/tools/make-appimage.sh inside
   ls -la "$B"/Zero-Lab-*-linux-x86_64*
@@ -46,8 +46,10 @@ inside() {
   sed -i 's/^# deb-src/deb-src/' /etc/apt/sources.list
   apt-get update -qq
   apt-get install -y -qq --no-install-recommends build-essential ninja-build meson pkg-config python3 python3-venv python3-tomli \
-    python3-yaml libglib2.0-dev libpixman-1-dev libslirp-dev libepoxy-dev libdrm-dev libgbm-dev libvulkan-dev \
+    python3-yaml git libglib2.0-dev libpixman-1-dev libslirp-dev libepoxy-dev libdrm-dev libgbm-dev libvulkan-dev \
     libfdt-dev flex bison mtools patchelf curl ca-certificates xz-utils librsvg2-bin dpkg-dev file >/dev/null
+  git config --global --add safe.directory '*'  # the checkout is owned by the host user
+  rm -rf "$SRC" && "$ROOT/tools/source-bundle.sh" "$SRC" >/dev/null
   V=$(python3 -c 'import plistlib,sys; print(plistlib.load(open(sys.argv[1],"rb"))["CFBundleShortVersionString"])' "$ROOT/mac/Info.plist")
 
   # virglrenderer (Venus; libvulkan is dlopen'd, so soft mode runs without it) and QEMU, as linux/setup.sh builds them
@@ -107,7 +109,6 @@ EOF
   # complete corresponding source: Zero Lab's bundle plus the Ubuntu source package of every bundled library
   local S="$W/Zero-Lab-$V-linux-x86_64-source" pkgs
   mkdir -p "$S/ubuntu" && cp -R "$SRC/." "$S/"
-  rm -f "$S"/glib-*.tar.xz "$S"/gettext-*.tar.gz  # LGPL libraries of the macOS build only
   pkgs=$(for so in "$Q"/lib/* /usr/bin/mtools; do dpkg -S "*/$(basename "$so")" 2>/dev/null | head -n1 | cut -d: -f1; done \
          | sort -u | xargs dpkg-query -W -f '${source:Package}=${source:Version}\n' | sort -u)
   (cd "$S/ubuntu" && apt-get source -qq --download-only $pkgs)

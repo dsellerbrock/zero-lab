@@ -11,6 +11,7 @@ Every download is built from this repository alone. Every input comes from a pin
 | Download | Built on | Command |
 |---|---|---|
 | `Zero-Lab-<v>-macOS-arm64.dmg` | macOS 26+, Apple Silicon | `mac/build-bundle.sh all` |
+| `Zero-Lab-<v>-linux-x86_64.AppImage` (+ `-source.tar`) | Linux x86_64 with podman or docker | `tools/make-appimage.sh` |
 | `Zero-Lab-<v>-linux-windows.zip` (WSL / build-from-source fallback) | Linux or macOS | `tools/make-linux-windows-bundle.sh` |
 | `Zero-Lab-<v>-kernel-source.tar` (GPL source of the Pi kernel) | anywhere | made by the zip step (`kernel/build.sh source`) |
 | The Pi kernel `kernel/kernel8-virtio.img` (an input to all of the above) | Linux or macOS with Docker | `kernel/build.sh` |
@@ -47,7 +48,17 @@ The steps:
 
 To build against a local checkout of the fork while developing it, set `ZL_QEMU_REPO=/path/to/clone`.
 
-## 3. Linux / Windows-WSL zip
+## 3. Linux AppImage
+
+Requirements: Linux x86_64 with podman (rootless is fine) or docker, git, and the kernel from step 1 in `kernel/`.
+
+```bash
+ZL_JOBS=4 tools/make-appimage.sh
+```
+
+Everything runs in `ubuntu:22.04` (pinned by digest; glibc 2.35, so the AppImage runs on Ubuntu 22.04 and anything newer). It packs the sources with `tools/source-bundle.sh` and builds virglrenderer (Venus, Vulkan loaded at run time) and the QEMU fork from those tarballs. Then it bundles the libraries QEMU needs; glibc and the GPU stack (GL, EGL, Vulkan, gbm, drm) stay the host's. It adds python-build-standalone 3.12, mtools, the kernel and the samples, and packs everything with appimagetool and the type2 runtime (both pinned by sha256). Output in `build/appimage/`: the AppImage, and `Zero-Lab-<v>-linux-x86_64-source.tar` with the GPL sources plus the Ubuntu source package of every bundled library. [`linux/AppRun`](../linux/AppRun) is the entry point: a double-click reopens it in a terminal (closing that stops the Pi), and it offers an app-menu entry once.
+
+## 4. Linux / Windows-WSL zip
 
 Requirements:
 - Linux: `apt install librsvg2-bin imagemagick xz-utils zip git`.
@@ -67,7 +78,7 @@ This writes `build/Zero-Lab-<v>-linux-windows.zip` (the installers, app, samples
 - this repository at HEAD;
 - on macOS, the glib and gettext sources of the exact versions Homebrew installed, checked against the publishers' checksums.
 
-`VERSIONS.txt` records every version used. The dmg and the zip both include this folder. The kernel's source is its own release asset because it's 157 MB.
+`VERSIONS.txt` records every version used. The dmg and the zip include this folder; the AppImage ships it as its `-source.tar`. The kernel's source is its own release asset because it's 157 MB.
 
 ## Testing a build
 
@@ -87,7 +98,7 @@ HOME=/tmp/zl-test ZL_QEMU_DIR="build/mac/Zero Lab.app/Contents/Resources/qemu" p
 python3 tests/e2e.py --url http://127.0.0.1:8660 --provision desktop --image e2e --gpu venus
 ```
 
-On Linux or WSL, use `--gpu soft --accel tcg`. GitHub's macOS runners can't use the Apple Hypervisor, so the e2e runs on real machines before a release, not in CI.
+On Linux or WSL, use `--gpu soft --accel tcg`. For the AppImage, start it instead of `server.py`: `HOME=/tmp/zl-test ZL_IN_TERMINAL=1 ./Zero-Lab-<v>-linux-x86_64.AppImage --port 8660 &` (`ZL_IN_TERMINAL=1` keeps it from opening a terminal window). GitHub's macOS runners can't use the Apple Hypervisor, so the e2e runs on real machines before a release, not in CI.
 
 ## Releasing
 

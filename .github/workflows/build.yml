@@ -53,3 +53,19 @@ jobs:
       - run: ZL_JOBS=3 mac/build-bundle.sh all
       - uses: actions/upload-artifact@v4
         with: { name: macos-dmg, path: build/mac/Zero-Lab-*-macOS-arm64.dmg, if-no-files-found: error }
+
+  appimage:  # Zero-Lab-<v>-linux-x86_64.AppImage + its GPL/LGPL source tar (built in ubuntu:22.04 with podman)
+    needs: [test, kernel]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: kernel, path: kernel }
+      - run: ZL_JOBS=4 tools/make-appimage.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: appimage
+          path: |
+            build/appimage/Zero-Lab-*-linux-x86_64.AppImage
+            build/appimage/Zero-Lab-*-linux-x86_64-source.tar
+          if-no-files-found: error
