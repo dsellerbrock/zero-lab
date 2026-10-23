@@ -23,7 +23,7 @@ import vm  # noqa: E402
 
 
 def tiny_dtb():
-    """/ { chosen {}; soc { watchdog@7e100000 {status="okay"}; fb {}; mmc@7e202000 {}; mmc@7e300000 {dmas;dma-names}; mmcnr@7e300000 {} } }"""
+    """/ { chosen {}; soc { watchdog@7e100000 {status="okay"}; fb {}; spi@7e204000 {status="disabled"; spidev@0 {}}; mmc@7e202000 {}; mmc@7e300000 {dmas;dma-names}; mmcnr@7e300000 {} } }"""
     strings, body = bytearray(), bytearray()
 
     def s(name):
@@ -47,6 +47,7 @@ def tiny_dtb():
     begin("soc")
     begin("watchdog@7e100000"); prop("status", b"okay\0"); end()
     begin("fb"); end()
+    begin("spi@7e204000"); prop("status", b"disabled\0"); begin("spidev@0"); end(); end()
     begin("mmc@7e202000"); prop("status", b"okay\0"); end()
     begin("mmc@7e300000"); prop("dmas", b"\0\0\0\x0b"); prop("dma-names", b"rx-tx\0"); prop("status", b"disabled\0"); end()
     begin("mmcnr@7e300000"); prop("status", b"okay\0"); end()
@@ -73,6 +74,8 @@ class FdtTest(unittest.TestCase):
         self.assertEqual(t.get("/chosen", "zl-gpu-mode"), b"venus\0")
         self.assertEqual(t.get("/chosen", "zl-user"), b"pi\0")
         self.assertEqual(t.get("/system", "linux,revision"), bytes.fromhex("00902120"))  # gpiozero needs it
+        self.assertEqual(t.get("/soc/spi@7e204000", "status"), b"okay\0")  # dtparam=spi=on
+        self.assertNotIn("status", t.node("/soc/spi@7e204000/spidev@0").props)  # spidev0.0 stays enabled
         v = fdt.Tree(fdt.qemu_dtb(raw, "soft", "virtio", {}))
         self.assertEqual(v.get("/soc/mmc@7e202000", "status"), b"okay\0")  # SD untouched for virtio root
 
@@ -469,6 +472,26 @@ class ServerTest(unittest.TestCase):
                 self.assertEqual(self.req("POST", f"/api/fs/{ep}", token="tok", body=b)[0], 200)
         finally:
             del self.app.fs
+
+    def test_adc(self):
+        calls = []
+        self.app.vm.qmp = lambda name, **a: calls.append((name, a))
+        try:
+            self.assertEqual(self.req("POST", "/api/adc", body={"channel": 0, "value": 1})[0], 403)  # no token
+            self.app.vm.status = "stopped"
+            code, body = self.req("POST", "/api/adc", token="tok", body={"channel": 0, "value": 512})
+            self.assertEqual(code, 400)
+            self.assertIn(b"not running", body)
+            self.app.vm.status = "running"
+            for bad in ({"channel": 8, "value": 0}, {"channel": 0, "value": 1024}, {"channel": -1, "value": 0},
+                        {"channel": 0, "value": "x"}, {"channel": 0}):
+                self.assertEqual(self.req("POST", "/api/adc", token="tok", body=bad)[0], 400, bad)
+            self.assertEqual(calls, [])
+            self.assertEqual(self.req("POST", "/api/adc", token="tok", body={"channel": 3, "value": 1023})[0], 200)
+            self.assertEqual(calls, [("qom-set", {"path": "/machine/mcp3008", "property": "ch3", "value": 1023})])
+        finally:
+            del self.app.vm.qmp
+            self.app.vm.status = "stopped"
 
     def test_reveal_only_known_places(self):
         self.assertEqual(self.req("POST", "/api/reveal", token="tok", body={"what": "/etc/passwd"})[0], 400)

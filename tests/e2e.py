@@ -6,7 +6,7 @@
 
 Steps: (optional) add+provision an image; boot; wait for the desktop; screenshot; GPIO round trip
 (widget-style drive -> guest program reads it -> guest drives LED pin -> host sees it) with both
-samples; stop. Prints one JSON summary line; exit status 0 only if every step passed.
+samples; analog knob via the MCP3008 ADC; stop. Prints one JSON summary line; exit status 0 only if every step passed.
 """
 import argparse
 import hashlib
@@ -195,8 +195,19 @@ def main():
         step(f"knob-py:value={value}", line(f"knob={value}", m))
     c.call("/api/project/stop", {})
 
+    # Analog knob: the fork's MCP3008 on SPI0 CE0, read with gpiozero; the program prints adc= at start and on change
+    m = c.mark()
+    run_sample("adc-knob-py")
+    for value in (0, 512, 1023):
+        c.call("/api/adc", {"channel": 0, "value": value})
+        e = c.wait(lambda e: e["type"] == "proc" and e.get("line", "").startswith("adc=")
+                   and abs(float(e["line"].split("=")[1]) - value / 1023) <= 0.02, 10, m)
+        step(f"adc-knob-py:ch0={value}", e, line=e and e["line"].strip())
+        m = c.mark()
+    c.call("/api/project/stop", {})
+
     # 7-segment: the guest's segment pins match the digit it announces
-    segs, digits = (21, 20, 16, 12, 7, 8, 25), ["1111110", "0110000", "1101101", "1111001", "0110011",
+    segs, digits = (21, 20, 16, 12, 24, 23, 25), ["1111110", "0110000", "1101101", "1111001", "0110011",
                                                   "1011011", "1011111", "1110000", "1111111", "1111011"]
     m = run_sample("seven-segment-py")
     seen = set()

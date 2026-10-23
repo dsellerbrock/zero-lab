@@ -196,6 +196,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--board); width: 16p
 .knob { width: 50px; height: 50px; border-radius: 50%; background: conic-gradient(var(--board) var(--a), var(--hole) 0);
         display: grid; place-items: center; cursor: ns-resize; }
 .knob div { width: 36px; height: 36px; border-radius: 50%; background: var(--paper); display: grid; place-items: center; font: 13px var(--mono); }
+.slider { width: 120px; accent-color: var(--board); } .slider + output { display: inline-block; width: 4ch; margin-left: 6px; font: 13px var(--mono); }
 svg.seg7 polygon { fill: #3a2a2a; } svg.seg7 polygon.on { fill: #ff3b30; }
 canvas.probe { background: var(--console); border-radius: var(--r-s); }
 

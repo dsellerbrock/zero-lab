@@ -480,6 +480,13 @@ def make_handler(app, token, port):
                 if not app.gpio:
                     raise RuntimeError("VM is not running")
                 app.gpio.drive(int(b["pin"]), 1 if b["level"] else 0)
+            elif path == "/api/adc":  # the fork's MCP3008 on SPI0 CE0
+                ch, value = int(b["channel"]), int(b["value"])
+                if not (0 <= ch < 8 and 0 <= value <= 1023):
+                    raise ValueError("channel must be 0-7 and value 0-1023")
+                if app.vm.status != "running":
+                    raise RuntimeError("VM is not running")
+                app.vm.qmp("qom-set", path="/machine/mcp3008", property=f"ch{ch}", value=value)
             elif path == "/api/serial":
                 app.vm.serial_write(str(b["text"]))
             elif path == "/api/image/add":

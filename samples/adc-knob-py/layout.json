@@ -1,0 +1,15 @@
+{
+ "version": 1,
+ "widgets": [
+  {
+   "type": "knob",
+   "x": 20,
+   "y": 24,
+   "label": "Knob",
+   "pins": [],
+   "mode": "adc",
+   "channel": 0,
+   "value": 0
+  }
+ ]
+}

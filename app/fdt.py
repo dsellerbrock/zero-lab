@@ -109,6 +109,7 @@ def qemu_dtb(stock, gpu, root, chosen):
     Same edits as raspi-zero2w's raspios-sdhci.dtb + prepare-gpu-dtb.sh virgl mode:
     no watchdog (QEMU lacks it), SD card on SDHCI in PIO mode (the SDHOST path is flaky),
     and virtio-gpu owns the display instead of the firmware framebuffer.
+    SPI0 is on (/dev/spidev0.0 reads the emulated MCP3008 ADC).
     """
     t = Tree(stock)
     t.set("/soc/watchdog@7e100000", "status", "disabled")
@@ -124,6 +125,8 @@ def qemu_dtb(stock, gpu, root, chosen):
     if not any(c.name == "system" for c in t.root.children):
         t.root.children.append(Node("system"))
     t.set("/system", "linux,revision", (0x902120).to_bytes(4, "big"))
+    # dtparam=spi=on: SPI0 and its spidev@0/@1 children, for the fork's MCP3008 ADC on CE0
+    t.set("/soc/spi@7e204000", "status", "okay")
     t.set("/chosen", "zl-gpu-mode", gpu)
     for name, value in chosen.items():
         t.set("/chosen", name, value)

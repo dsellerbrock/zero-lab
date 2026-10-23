@@ -30,10 +30,10 @@ This is the fast version: the Pi's CPU runs on your Mac's own cores (Apple Hyper
 3. Click **Boot**. The Pi's desktop appears in the middle of the window.
 
 ## GPIO sandbox (right side)
-- Add **Buttons**, **Switches**, **Knobs**, **LEDs**, **7-segment** displays and a **Probe**. Click ⚙ on a widget to choose its pins; pin numbers are BCM GPIO numbers 0–27.
+- Add **Buttons**, **Switches**, **Knobs**, **Sliders**, **LEDs**, **7-segment** displays and a **Probe**. Click ⚙ on a widget to choose its pins; pin numbers are BCM GPIO numbers 0–27.
 - Inputs drive the Pi's pins, and the Pi's outputs light LEDs. The strip at the top shows every pin: blue = input, orange = output.
 - A Button is "active low" by default (it rests at 1 and pressing it gives 0), just like a real button wired with a pull-up. This matches `gpiozero.Button(17)`.
-- A Knob drives several pins as a binary number (the first pin is the lowest bit). There's no analogue input yet.
+- A Knob drives several pins as a binary number (the first pin is the lowest bit), or, set to **Analog (MCP3008 channel N)** in ⚙, a 0–1023 value on the Pi's emulated MCP3008 ADC (SPI0, CE0). A **Slider** does the same. Read it as on a real Pi: `from gpiozero import MCP3008; MCP3008(channel=0).value` (try `samples/adc-knob-py`). SPI0 is always on, so GPIO 7–11 are taken.
 - Save layouts by name, export them to your Downloads folder, or drop a `.json` layout onto the canvas.
 
 ## Your own code
