@@ -310,7 +310,7 @@ function updateHeader() {
 }
 
 // ---------- breadboard parts ----------
-const drive = (pin, level) => api("/api/gpio", { pin, level }).catch((e) => toast(e.message));
+const drive = (pin, level) => (pins.seen ? api("/api/gpio", { pin, level }).catch((e) => toast(e.message)) : null);
 const bb = breadboard({ canvas: $("canvas"), drive, lev: (p) => pins.lev[p] ?? 0, esc });
 const applyIdle = () => { if (pins.seen) bb.applyIdle(); };
 let addPos = 0;

@@ -6,6 +6,8 @@ const DEFAULTS = {
 };
 const SEGS = ["4,2 24,2 20,6 8,6", "26,4 26,24 22,21 22,8", "26,28 26,48 22,44 22,31", "4,50 24,50 20,46 8,46",
   "2,28 2,48 6,44 6,31", "2,4 2,24 6,21 6,8", "4,26 8,23 20,23 24,26 20,29 8,29"];
+// Free pins to hand out, best first: avoids 0/1 (ID EEPROM), 2/3 (I2C) and 14/15 (UART) until nothing else is left.
+const PIN_ORDER = [5, 6, 13, 19, 26, 16, 20, 21, 12, 25, 24, 23, 22, 27, 17, 18, 4, 7, 8, 9, 10, 11, 2, 3, 14, 15, 0, 1];
 const SAVE_KEYS = ["id", "type", "x", "y", "label", "pins", "idle", "on", "value", "color", "activeLow"];
 
 export function breadboard({ canvas, drive, lev, esc }) {
@@ -53,6 +55,7 @@ export function breadboard({ canvas, drive, lev, esc }) {
       k.onpointerup = () => (k.onpointermove = null);
       k.onkeydown = (e) => { if (e.key === "ArrowUp" || e.key === "ArrowRight") set(w.value + 1); if (e.key === "ArrowDown" || e.key === "ArrowLeft") set(w.value - 1); };
       w.applyIdle = () => w.pins.forEach((p, i) => drive(p, (w.value >> i) & 1)); show();
+      w.redraw = () => { w.value = Math.min(w.value, max()); show(); };
     } else if (w.type === "led") {
       body.innerHTML = `<div class="led" role="img" aria-label="" style="color:${esc(w.color)}"></div>`;
       w.update = () => { const on = outActive(w.pins[0]); body.firstChild.classList.toggle("on", on); };
@@ -86,16 +89,25 @@ export function breadboard({ canvas, drive, lev, esc }) {
         <label class="field">GPIO pins${w.type === "seg7" ? " for a,b,c,d,e,f,g" : w.type === "knob" ? ", lowest bit first" : ""} <input data-k="pins" value="${w.pins.join(",")}" inputmode="numeric"></label>` +
         (w.type === "button" ? `<label class="check"><input type="checkbox" data-k="idle" ${w.idle ? "checked" : ""}> Reads 1 until pressed (pull-up)</label>` : "") +
         (w.type === "led" || w.type === "seg7" ? `<label class="check"><input type="checkbox" data-k="activeLow" ${w.activeLow ? "checked" : ""}> Lights when the pin is 0</label>` : "") +
-        (w.type === "led" ? `<label class="field">Colour <input type="color" data-k="color" value="${esc(w.color)}"></label>` : "");
-      cfg.oninput = () => {
-        for (const i of cfg.querySelectorAll("input")) {
-          const k = i.dataset.k;
-          if (k === "pins") { const ps = i.value.split(",").map((s) => parseInt(s, 10)).filter((n) => n >= 0 && n < 28); if (ps.length) w.pins = ps.slice(0, 8); }
-          else if (k === "idle") w.idle = i.checked ? 1 : 0;
-          else if (k === "activeLow") w.activeLow = i.checked;
-          else w[k] = i.value;
+        (w.type === "led" ? `<label class="field">Colour <input type="color" data-k="color" value="${esc(w.color)}"></label>` : "") +
+        (w.type === "knob" ? `<label class="field">Steps (more steps use more pins)
+          <select data-k="steps">${[2, 4, 8, 16, 32, 64, 128, 256].map((n) => `<option value="${n}" ${n === 1 << w.pins.length ? "selected" : ""}>${n} steps, ${Math.log2(n)} pin${n > 2 ? "s" : ""}</option>`).join("")}</select></label>
+          <p class="note">A Pi pin is only on or off, so the knob sends its position as a binary number across these pins.</p>` : "");
+      const pinsInput = cfg.querySelector('[data-k="pins"]');
+      cfg.oninput = (e) => {
+        const i = e.target, k = i.dataset.k;
+        if (k === "pins") { const ps = i.value.split(",").map((s) => parseInt(s, 10)).filter((n) => n >= 0 && n < 28); if (ps.length) w.pins = ps.slice(0, 8); }
+        else if (k === "steps") {
+          const bits = Math.log2(+i.value), used = new Set(widgets.filter((x) => x !== w).flatMap((x) => x.pins));
+          w.pins = w.pins.slice(0, bits);
+          for (const p of PIN_ORDER) { if (w.pins.length >= bits) break; if (!used.has(p) && !w.pins.includes(p)) w.pins.push(p); }
+          pinsInput.value = w.pins.join(",");
         }
+        else if (k === "idle") w.idle = i.checked ? 1 : 0;
+        else if (k === "activeLow") w.activeLow = i.checked;
+        else if (k) w[k] = i.value;
         if (w.type === "led") body.firstChild.style.color = w.color;
+        if (w.redraw) { w.redraw(); w.applyIdle?.(); }
         relabel(); w.update && w.update();
       };
       el.append(cfg);
