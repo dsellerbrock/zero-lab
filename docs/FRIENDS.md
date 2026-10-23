@@ -22,9 +22,9 @@ This is the fast version: the Pi's CPU runs on your Mac's own cores (Apple Hyper
 2. Make it executable: right-click it → **Properties** → turn on **Allow executing file as program** (or run `chmod +x Zero-Lab-*.AppImage` in a terminal).
 3. Double-click it. A terminal window opens (closing it stops the Pi) and Zero Lab opens in your browser. The first time, it offers to add Zero Lab to your app menu.
 
-Your images and settings live in `~/.local/share/zero-lab`; the AppImage itself never changes. If double-clicking does nothing, run it from a terminal (`./Zero-Lab-*.AppImage`) to see why. If it says FUSE is missing, run `./Zero-Lab-*.AppImage --appimage-extract-and-run` instead.
+Your images and settings live in `~/.local/share/zero-lab`; the AppImage itself never changes. It needs FUSE's `fusermount` (the `fuse3` package, already installed on Ubuntu, Fedora and most desktops). If double-clicking does nothing, run it from a terminal (`./Zero-Lab-*.AppImage`) to see why; if it says FUSE is missing, install `fuse3` or run `./Zero-Lab-*.AppImage --appimage-extract-and-run`.
 
-**Fallback** (an ARM computer, or a distribution older than Ubuntu 22.04): unzip `Zero-Lab-…-linux-windows.zip` and double-click **Install Zero Lab (Linux).desktop** (or run `bash setup.sh` in a terminal in that folder). It asks for your password to install build tools, then builds Zero Lab from source (10–40 minutes), and adds it to your app menu.
+**Other computers** (ARM, or a distribution older than Ubuntu 22.04): Zero Lab can be built from source with `linux/setup.sh`; see `docs/BUILDING.md` in the source code.
 
 **How fast is it on Windows and Linux?** On a normal Intel/AMD PC, the Pi's ARM CPU has to be emulated instruction by instruction, because no PC can run ARM code natively. Everything works, but booting and apps are several times slower than on an Apple Silicon Mac.
 

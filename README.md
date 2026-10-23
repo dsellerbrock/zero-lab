@@ -14,7 +14,7 @@ Zero Lab runs on **[qemu-raspi-zero2w](https://github.com/dsellerbrock/qemu-rasp
 
 ## Get it
 - **macOS** (Apple Silicon, 26+): `Zero-Lab-<version>-macOS-arm64.dmg`. CPU runs on HVF; graphics are Venus (Vulkan via Metal).
-- **Linux** (x86_64, Ubuntu 22.04 or newer, or the same age): `Zero-Lab-<version>-linux-x86_64.AppImage`. Mark it executable and double-click it; nothing to compile, no root. The CPU is emulated (TCG); graphics are software, or virgl/Venus where a GPU render node exists. Fallback (other CPUs, older distros): `Zero-Lab-<version>-linux-windows.zip`, then `bash setup.sh`, which builds the QEMU fork from source.
+- **Linux** (x86_64, Ubuntu 22.04 or newer, or the same age): `Zero-Lab-<version>-linux-x86_64.AppImage`. Mark it executable and double-click it; nothing to compile, no root. The CPU is emulated (TCG); graphics are software, or virgl/Venus where a GPU render node exists. Other CPUs or older distributions: build from source with `linux/setup.sh` ([docs/BUILDING.md](docs/BUILDING.md)).
 - **Windows 10/11**: the same zip; double-click `Install Zero Lab (Windows).cmd`. It sets up WSL2 + Ubuntu and runs `setup.sh` there.
 
 Downloads: https://pisim.ellerbrock.dev. Instructions for friends: [docs/FRIENDS.md](docs/FRIENDS.md).
