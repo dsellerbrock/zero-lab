@@ -110,6 +110,15 @@ function showProgress(m) {
     } else if (i !== idx) { pct.textContent = i < idx ? "done" : ""; bar.hidden = true; }
     if (li.dataset.stage === "first-boot" && i === idx && m.step && FIRST_BOOT[m.step])
       li.querySelector(".lbl").textContent = `First boot: ${FIRST_BOOT[m.step]}`;
+    if (li.dataset.stage === "first-boot" && i === idx && !showProgress.t0) {  // a running clock: this step is long and quiet
+      showProgress.t0 = Date.now();
+      showProgress.timer = setInterval(() => {
+        const s = Math.round((Date.now() - showProgress.t0) / 1000);
+        pct.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+      }, 1000);
+      $("go-note").textContent = "The first boot takes about 10 to 15 minutes. The Pi can look idle for several minutes while it prepares its disk; leave Zero Lab open until Boot turns green.";
+    }
+    if (i !== idx && li.dataset.stage === "first-boot" && showProgress.timer) { clearInterval(showProgress.timer); showProgress.timer = null; }
   });
   ["step-os", "step-user"].forEach((id) => $(id).classList.add("done"));
   $("img-add").disabled = true;
