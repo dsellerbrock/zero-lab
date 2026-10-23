@@ -64,7 +64,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--board); width: 16p
 .error { color: var(--signal); margin: var(--s2) 0 0; }
 
 /* ---------- top bar ---------- */
-.bar { display: flex; align-items: center; gap: var(--s3); padding: var(--s2) var(--s4);
+.topbar { display: flex; align-items: center; gap: var(--s3); padding: var(--s2) var(--s4);
        background: var(--paper); border-bottom: 1px solid var(--line); }
 .brand { display: flex; align-items: center; gap: var(--s2); }
 .brand img { width: 28px; height: 28px; }
@@ -82,7 +82,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--board); width: 16p
 .grow { flex: 1; }
 .reason { margin: 0; color: var(--ink-2); font-size: 13px; text-align: right; flex: 1 1 0; min-width: 0;
           overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.brand, .status, .ready-btn, .summary, .bar .btn { flex: none; }
+.brand, .status, .ready-btn, .summary, .topbar .btn { flex: none; }
 
 /* ---------- bench layout ---------- */
 .bench { display: grid; grid-template-columns: auto minmax(0, 1fr) 400px; gap: var(--s4); padding: var(--s4); min-height: 0;
@@ -232,12 +232,12 @@ canvas.probe { background: var(--console); border-radius: var(--r-s); }
   .screen { min-height: 300px; }
   .breadboard { grid-template-rows: none; }
   .panel.code { grid-template-columns: 1fr; }
-  .bar { flex-wrap: wrap; }
+  .topbar { flex-wrap: wrap; }
   .pair { grid-template-columns: 1fr; }
 }
 @media (max-width: 700px) {
   .bench { padding: var(--s2); gap: var(--s2); }
-  .bar { padding: var(--s2); gap: var(--s2); }
+  .topbar { padding: var(--s2); gap: var(--s2); }
   .summary { max-width: 100%; overflow-x: auto; }
   .summary span { padding: var(--s1) var(--s2); font-size: 12px; }
   .choices { grid-template-columns: 1fr; }
