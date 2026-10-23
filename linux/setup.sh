@@ -37,7 +37,7 @@ install_packages() {
     logged $sudo apt-get update
     # noninteractive: a package asking a question (tzdata, keyboard) would otherwise stall a hidden prompt
     logged $sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential ninja-build meson \
-      pkg-config python3 python3-venv libglib2.0-dev libpixman-1-dev libslirp-dev libepoxy-dev libdrm-dev \
+      pkg-config python3 python3-venv python3-tomli libglib2.0-dev libpixman-1-dev libslirp-dev libepoxy-dev libdrm-dev \
       libgbm-dev libvulkan-dev libfdt-dev flex bison mtools xz-utils openssh-client curl
   elif command -v dnf >/dev/null; then
     say "Installing build tools with dnf (you may be asked for your password)"
