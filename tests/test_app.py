@@ -215,6 +215,7 @@ class VmTest(unittest.TestCase):
         h = {"accels": ["hvf", "tcg"], "gpus": ["venus", "soft"]}
         c = vm.resolve({"ram": 9999, "gpu": "virgl", "accel": "auto"}, h)
         self.assertEqual((c["ram"], c["gpu"], c["accel"]), (1024, "venus", "hvf"))
+        self.assertEqual(vm.resolve({"cpus": 2}, h)["cpus"], 4)  # raspi3ap: QEMU refuses any -smp but 4
         d = Path(tempfile.mkdtemp())
         mbr = bytearray(512)
         mbr[510:512] = b"\x55\xaa"

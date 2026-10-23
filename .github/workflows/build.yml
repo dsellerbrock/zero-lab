@@ -136,7 +136,7 @@ jobs:
             kill -0 $! 2>/dev/null || { cat "$ZL/tmp/engine.log"; exit 1; }
             sleep 1
           done
-          python3 tests/e2e.py --provision desktop --gpu soft --accel tcg --cpus 2 | tee "$ZL/tmp/e2e.log"  # 3-core runner
+          python3 tests/e2e.py --provision desktop --gpu soft --accel tcg | tee "$ZL/tmp/e2e.log"  # 3-core runner: slow, hence the 20 s SSH timeout
       - id: cached
         if: always() && steps.cache.outputs.cache-hit != 'true'
         run: ls "$ZL/home/Library/Application Support/Zero Lab/cache/"*.ok && echo ok=true >> "$GITHUB_OUTPUT"

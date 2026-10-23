@@ -69,7 +69,7 @@ def resolve(cfg, h):
     if cfg["display"] not in h.get("displays", ["app"]):
         cfg["display"] = "app"
     cfg["ram"] = max(256, min(1024, int(cfg["ram"])))
-    cfg["cpus"] = max(1, min(4, int(cfg["cpus"])))
+    cfg["cpus"] = 4  # raspi3ap is always 4 cores; QEMU refuses any other -smp (min and max are 4)
     return cfg
 
 

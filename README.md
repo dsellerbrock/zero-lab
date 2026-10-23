@@ -25,7 +25,7 @@ Downloads: https://pisim.ellerbrock.dev. Getting started: [docs/GETTING-STARTED.
 - **GPIO breadboard.** A 40-pin header shown by physical position, plus parts you can drag onto it: buttons, switches, knobs and sliders (as GPIO bits or through an emulated MCP3008 ADC on SPI0), LEDs, a 7-segment display (on GPIO pins or an HT16K33 on I2C), a 16×2 LCD (I2C) and a probe. Zoom in and out, or pop it out into its own window. Layouts save as JSON in `~/Library/Application Support/Zero Lab/layouts` (Linux: `~/.local/share/zero-lab/layouts`, Windows: `%LOCALAPPDATA%\Zero Lab\layouts`).
 - **Files sidebar.** Browse the Pi's file system; drop files in; download files and folders to `~/Downloads`.
 - **Your code.** Drop Python, C/C++ (Makefile/CMake), Rust, Go or an ARM binary. It is built and run inside the Pi, never on your computer. The [samples](samples) cover each GPIO part: button-led (Python and C), switch, knob, analog knob (the emulated MCP3008 ADC on SPI0), 7-segment, 7-segment and LCD 16×2 over I2C (emulated HT16K33 and PCF8574 backpacks), probe and LED blink.
-- **Settings** in a drawer (memory, cores, speed-up, graphics, screen, internet, throw-away mode), each with an explanation.
+- **Settings** in a drawer (memory, speed-up, graphics, screen, internet, throw-away mode), each with an explanation.
 
 ## Build from source
 Everything builds from this repository; every input is pinned in [`tools/pins.sh`](tools/pins.sh). The full guide is [docs/BUILDING.md](docs/BUILDING.md): the kernel, the macOS dmg, the Linux AppImage, the Linux/WSL zip, GPL sources, testing and releasing. CI builds every download: Actions → **Build installers**.
