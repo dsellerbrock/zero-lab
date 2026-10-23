@@ -2,8 +2,7 @@
 rem Zero Lab for Windows: starts the app and opens it in your web browser. Closing this window stops the Pi.
 title Zero Lab - close this window to stop the Pi
 if not exist "%~dp0zero-lab\python\python.exe" (
-  echo Zero Lab is still inside the zip file.
-  echo Right-click the zip, choose "Extract All...", then double-click "Zero Lab" in the extracted folder.
+  echo Zero Lab's files are missing next to this launcher. Reinstall Zero Lab.
   pause
   exit /b 1
 )
