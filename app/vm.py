@@ -333,7 +333,8 @@ class VM:
                 try:  # raspi has no power controller: QEMU keeps running after guest poweroff
                     self.qmp("quit")
                 except (OSError, RuntimeError):
-                    pass
+                    # QMP can miss its 10 s timeout under TCG on a busy host; the guest has halted, so SIGTERM is safe
+                    self.proc.terminate()
             for mark in re.findall(r"ZL_[A-Z_]+", buf):
                 if mark not in self.seen:
                     self.seen.add(mark)
