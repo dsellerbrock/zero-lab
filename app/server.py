@@ -27,6 +27,7 @@ import guest
 import image
 import readiness
 import vm as vmod
+import window
 
 APP = Path(__file__).resolve().parent
 STATIC = APP / "static"
@@ -43,6 +44,8 @@ I2C_PROPS = {"ram", "oscillator", "display-on", "blink", "brightness", "text", "
 def default_data_dir():
     if platform.system() == "Darwin":
         return Path.home() / "Library/Application Support/Zero Lab"
+    if platform.system() == "Windows":
+        return Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData/Local")) / "Zero Lab"
     return Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "zero-lab"
 
 
@@ -148,6 +151,8 @@ class App:
         target = path if path.exists() else path.parent
         if platform.system() == "Darwin":
             subprocess.run(["open", "-R", str(target)], check=False)
+        elif platform.system() == "Windows":
+            subprocess.run(["explorer", f"/select,{target}"], check=False)
         elif "microsoft" in platform.release().lower():
             win = subprocess.run(["wslpath", "-w", str(target)], capture_output=True, text=True).stdout.strip()
             subprocess.run(["explorer.exe", f"/select,{win}"], check=False)
@@ -177,7 +182,7 @@ class App:
 
     def imgdir(self, name):
         d = self.data / "images" / name
-        if not (d / "state.json").exists() or "/" in name or name.startswith("."):
+        if not (d / "state.json").exists() or any(c in name for c in "/\\:") or name.startswith("."):
             raise ValueError(f"unknown image {name!r}")
         return d
 
@@ -210,8 +215,9 @@ class App:
                 for k, o in zip(I2C_PARTS, objs)}
 
     def attach_gpio(self):
-        if vmod.wait_for(self.vm.run / "qtest.sock", self.vm.proc, 30):
-            self.gpio = gpio.Gpio(gpio.QTest(str(self.vm.run / "qtest.sock")), self.on_pins)
+        s = vmod.connect(self.vm.chan["qtest"], self.vm.proc, 30)
+        if s:
+            self.gpio = gpio.Gpio(gpio.QTest(s), self.on_pins)
 
     def on_pins(self, state):
         self.hub.emit("gpio", fn=[f for f, _ in state[:gpio.HEADER_PINS]],
@@ -287,7 +293,7 @@ class App:
 
     # ---------- layouts ----------
     def layout_path(self, name):
-        if not name or "/" in name or name.startswith(".") or len(name) > 64:
+        if not name or any(c in name for c in "/\\:") or name.startswith(".") or len(name) > 64:
             raise ValueError("bad layout name")
         return self.data / "layouts" / f"{name}.json"
 
@@ -563,14 +569,51 @@ def make_handler(app, token, port):
     return H
 
 
+def lock_data(data):
+    """One engine per data folder: two would boot the same Pi disk at once and corrupt it (QEMU's own image
+    locking does nothing on Windows). -> the open lock file to keep, or None if another engine holds it."""
+    data.mkdir(parents=True, exist_ok=True)
+    f = open(data / "engine.lock", "a+")
+    try:
+        if os.name == "nt":
+            import msvcrt  # noqa: PLC0415
+            f.seek(0)
+            msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl  # noqa: PLC0415
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        f.close()
+        return None
+    return f
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--port", type=int, default=0)
     ap.add_argument("--data", type=Path, default=default_data_dir())
     ap.add_argument("--open", action="store_true", help="open the UI in the default browser")
     ap.add_argument("--watch-stdin", action="store_true", help="exit when stdin closes (app wrapper)")
+    ap.add_argument("--app-window", action="store_true",
+                    help="Windows: show the UI in its own window; closing it stops the Pi and exits")
     args = ap.parse_args()
 
+    lock = lock_data(args.data)  # held until exit
+    if sys.stdout is None:  # pythonw (the Windows shortcut) has no console
+        sys.stdout = sys.stderr = open(args.data / "engine.log", "a", buffering=1, encoding="utf-8")
+    if not lock:  # e.g. the shortcut double-clicked twice: show the running one instead
+        url = (args.data / "engine.url").read_text().strip() if (args.data / "engine.url").exists() else ""
+        print(f"ZL_ALREADY_RUNNING {url}", flush=True)  # the Mac wrapper reads this line
+        if url and args.app_window:
+            window.open_window(url, args.data)
+        elif url and args.open:
+            webbrowser.open(url)
+        return
+    if args.app_window:
+        window.end_children_with_me()
+        if not window.find_browser():
+            window.message("Zero Lab shows its window with Microsoft Edge or Google Chrome. Install one, then start Zero Lab again.")
+            return
     app = App(args.data)
     token = secrets.token_urlsafe(24)
     srv = ThreadingHTTPServer(("127.0.0.1", args.port), None)
@@ -579,18 +622,23 @@ def main():
     srv.daemon_threads = True
     url = f"http://127.0.0.1:{port}/"
     print(f"ZL_URL {url}", flush=True)
+    (args.data / "engine.url").write_text(url)
 
     def shutdown():
         app.stop()
         srv.shutdown()
 
     # Closing the terminal / WSL console window (SIGHUP) or a kill (SIGTERM) still stops the Pi cleanly.
-    for sig in (signal.SIGTERM, signal.SIGHUP):
-        signal.signal(sig, lambda *_: threading.Thread(target=shutdown, daemon=True).start())
+    # Windows has no SIGHUP; Ctrl+Break arrives as SIGBREAK.
+    for name in ("SIGTERM", "SIGHUP", "SIGBREAK"):
+        if hasattr(signal, name):
+            signal.signal(getattr(signal, name), lambda *_: threading.Thread(target=shutdown, daemon=True).start())
     if args.watch_stdin:
         threading.Thread(target=lambda: (sys.stdin.buffer.read(), shutdown()), daemon=True).start()
     if args.open:
         webbrowser.open(url)
+    if args.app_window:  # the window's process ends when the window closes; so does Zero Lab
+        threading.Thread(target=lambda: (window.open_window(url, args.data).wait(), shutdown()), daemon=True).start()
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

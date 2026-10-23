@@ -14,14 +14,20 @@ Zero Lab's own code is GPL-2.0-or-later (see LICENSE); its source is https://git
 | pixman | Homebrew version at build time (`VERSIONS.txt`) | MIT | macOS | https://cairographics.org/releases/ |
 | libslirp | Homebrew version at build time (`VERSIONS.txt`) | BSD-3-Clause | macOS | https://gitlab.freedesktop.org/slirp/libslirp |
 | MoltenVK | 1.4.2 (official release) | Apache-2.0 | macOS | https://github.com/KhronosGroup/MoltenVK |
-| CPython (python-build-standalone) | 3.12.12 | PSF-2.0 (+ bundled lib licences) | macOS, Linux AppImage | https://github.com/astral-sh/python-build-standalone |
+| CPython (python-build-standalone) | 3.12.12 | PSF-2.0 (+ bundled lib licences) | macOS, Windows, Linux AppImage | https://github.com/astral-sh/python-build-standalone |
 | GLib, util-linux libmount/libblkid | Ubuntu 22.04 packages (`ubuntu/README.txt`) | LGPL-2.1-or-later | Linux AppImage (shared libraries in `qemu/lib`, replaceable) | `ubuntu/` in `Zero-Lab-<version>-linux-x86_64-source.tar` |
 | pixman, libslirp, libfdt, libepoxy, libffi, PCRE, PCRE2, libselinux, libbsd, libmd | Ubuntu 22.04 packages (`ubuntu/README.txt`) | MIT / BSD / public domain (per package) | Linux AppImage | `ubuntu/` in the `-source.tar` |
 | mtools | Ubuntu 22.04 package (4.0.32) | GPL-3.0-or-later | Linux AppImage | `ubuntu/` in the `-source.tar` |
 | AppImage type2 runtime (contains libfuse3, squashfuse, zstd) | 20251108 | MIT; libfuse3 LGPL-2.1 | Linux AppImage (the file's ELF header) | https://github.com/AppImage/type2-runtime/releases/tag/20251108 |
+| GLib (Fedora mingw64 build) | 2.88.3 | LGPL-2.1-or-later | Windows (DLLs, replaceable) | `mingw-glib2-2.88.3-1.fc44.src.rpm` |
+| gettext libintl (Fedora mingw64 build) | 0.26 | LGPL-2.1-or-later | Windows (DLL, replaceable) | `mingw-gettext-0.26-2.fc44.src.rpm` |
+| win-iconv 0.0.10, PCRE2 10.48, libffi 3.5.2, zlib 1.3.2, pixman 0.46.4, winpthreads 13.0.0 (Fedora mingw64 builds) | as listed | public domain, BSD-3-Clause, MIT, Zlib, MIT, MIT/ZPL | Windows (DLLs) | Fedora 44 packages listed in `windows-dlls.txt` and `tools/pins.sh` |
+| libgcc (`libgcc_s_seh-1.dll`) | GCC 16.2.1 | GPL-3.0 with the GCC Runtime Library Exception | Windows | https://gcc.gnu.org |
+| libslirp, libfdt (dtc): QEMU meson subprojects | as QEMU's `subprojects/*.wrap` pin them | BSD-3-Clause; GPL-2.0-or-later or BSD-2-Clause | Windows (built into QEMU) | `qemu-subprojects-slirp-dtc.tar.xz` |
+| NSIS (installer stub) | 3.11 | zlib | Windows installer | `mingw-nsis-3.11-3.fc44.src.rpm` |
 | B612 and B612 Mono fonts (latin subset, woff2) | Google Fonts build of 1.008 | SIL OFL 1.1 | all | `app/static/fonts/` (licence: `app/static/fonts/OFL.txt`), https://github.com/polarsys/b612 |
 | noVNC | 1.7.0 | MPL-2.0 (core), MIT (pako) | all | shipped as source in `app/static/novnc/` (licence: `app/static/novnc/LICENSE.txt`) |
 
-With the Linux/Windows zip (`setup.sh`, WSL), QEMU and virglrenderer are built from the bundled sources on your machine, and the other libraries come from your distribution. The Linux AppImage bundles the libraries listed above; glibc and the GPU drivers come from your distribution.
+The Linux AppImage bundles the libraries listed for it; glibc and the GPU drivers come from your distribution. The Windows installer ships QEMU cross-built with Fedora's mingw-w64 (no virglrenderer); `…-windows-x64-sources.zip` holds the sources of everything listed for Windows. To build Linux from source instead, `linux/setup.sh` builds QEMU and virglrenderer on your machine against your distribution's libraries.
 
 Raspberry Pi OS itself is not included. Zero Lab downloads it from raspberrypi.com, where it is offered under its own licences. "Raspberry Pi" is a trademark of Raspberry Pi Ltd. Zero Lab is not affiliated with Raspberry Pi Ltd.

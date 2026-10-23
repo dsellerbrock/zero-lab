@@ -1,5 +1,5 @@
 #!/bin/bash
-# Zero Lab installer for Linux (and for Ubuntu inside WSL2, called by setup.ps1).
+# Build Zero Lab from source on Linux (the release download is the AppImage; see docs/BUILDING.md).
 # Builds the bundled QEMU fork + virglrenderer from source, installs the app, adds a menu icon.
 #   bash setup.sh            install or update
 #   bash setup.sh --check    only report what this machine supports

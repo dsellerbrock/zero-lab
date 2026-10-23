@@ -69,3 +69,21 @@ jobs:
             build/appimage/Zero-Lab-*-linux-x86_64.AppImage
             build/appimage/Zero-Lab-*-linux-x86_64-source.tar
           if-no-files-found: error
+
+  windows:  # Zero-Lab-<v>-windows-x64-setup.exe (per-user install wizard) + its GPL sources zip
+    needs: [test, kernel]
+    runs-on: ubuntu-24.04
+    container: registry.fedoraproject.org/fedora:44@sha256:6ad1739ac6fb30f72ecc7b62a7ca94871d1cab215e4f5174113941047e0b4ed4  # = ZL_WIN_IMAGE in tools/pins.sh
+    steps:
+      - run: dnf -y -q install git  # so the checkout is a git repo (the source bundle archives HEAD)
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: kernel, path: kernel }
+      - run: ZL_JOBS=4 tools/make-windows-installer.sh all
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: |
+            build/windows/Zero-Lab-*-windows-x64-setup.exe
+            build/windows/Zero-Lab-*-windows-x64-sources.zip
+          if-no-files-found: error

@@ -12,10 +12,12 @@ Zero Lab runs a virtual Raspberry Pi Zero 2 W. You can boot it, use its desktop,
 
 This is the fast version: the Pi's CPU runs on your Mac's own cores (Apple Hypervisor), and its graphics use your Mac's GPU (Vulkan through Metal).
 
-### Windows 10/11
-1. Unzip `Zero-Lab-…-linux-windows.zip`.
-2. Double-click **Install Zero Lab (Windows).cmd**. It installs WSL2 and Ubuntu if you don't have them (Windows asks for permission and may need a restart; afterwards, double-click it again), then builds Zero Lab. That takes 10–40 minutes the first time.
-3. Then double-click **Zero Lab** on your desktop. It opens in your browser. Closing the small black window stops the Pi.
+### Windows 10/11 (64-bit)
+1. Double-click `Zero-Lab-…-windows-x64-setup.exe`. Windows SmartScreen may say "Windows protected your PC": click **More info**, then **Run anyway**. Zero Lab is free software without a paid code-signing certificate.
+2. Click through the wizard: it shows the licence, installs into `%LOCALAPPDATA%\Programs\Zero Lab` (no administrator password), and adds **Zero Lab** to the Start menu and your desktop.
+3. Leave **Launch Zero Lab** ticked and click **Finish**. Zero Lab opens in its own window. Close the window when you're done: Zero Lab shuts the Pi down and quits completely. (The window comes from Microsoft Edge, which is part of Windows; if you removed Edge, install Edge or Google Chrome.)
+
+Your Pi's disk images and layouts live in `%LOCALAPPDATA%\Zero Lab`. To uninstall, use **Settings → Apps → Installed apps → Zero Lab**; it keeps that data unless you tick **Also remove my Pi data**.
 
 ### Linux (Intel/AMD PC: Ubuntu 22.04 or newer, Fedora, Arch, Mint, …)
 1. Download `Zero-Lab-…-linux-x86_64.AppImage`.
@@ -53,4 +55,4 @@ Drop a file, folder or `.zip` on **Your code**, then click **Build & run**. Outp
 - Or pick a ready-made example under **Samples** and press **Load**: its code is staged and its parts appear on the breadboard. Then **Build & run**. With `button-led-py`, press the Button widget and the LED widget lights.
 
 ## Licences
-Zero Lab is free software under the GNU GPL v2 or later. It includes QEMU (GPL-2.0), a Linux kernel for the Pi (GPL-2.0; its source is the `kernel-source` download next to the app) and other components listed in `THIRD-PARTY.md`. The complete source code is in the **Source code (GPL)** folder (on the Mac disk image) the `sources` folder (in the zip) or the `linux-x86_64-source` download next to the AppImage, and online at https://github.com/dsellerbrock/zero-lab and https://github.com/dsellerbrock/qemu-raspi-zero2w. Raspberry Pi OS is downloaded from raspberrypi.com under its own licences and is not included. Raspberry Pi is a trademark of Raspberry Pi Ltd. Zero Lab is not affiliated with them.
+Zero Lab is free software under the GNU GPL v2 or later. It includes QEMU (GPL-2.0), a Linux kernel for the Pi (GPL-2.0; its source is the `kernel-source` download next to the app) and other components listed in `THIRD-PARTY.md`. The complete source code is in the **Source code (GPL)** folder (on the Mac disk image) the `linux-x86_64-source` download next to the AppImage, or the `…-windows-x64-sources.zip` download next to the Windows installer, and online at https://github.com/dsellerbrock/zero-lab and https://github.com/dsellerbrock/qemu-raspi-zero2w. Raspberry Pi OS is downloaded from raspberrypi.com under its own licences and is not included. Raspberry Pi is a trademark of Raspberry Pi Ltd. Zero Lab is not affiliated with them.

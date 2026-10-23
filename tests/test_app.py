@@ -13,6 +13,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
+import gzip  # noqa: E402
 import fdt  # noqa: E402
 import gpio  # noqa: E402
 import guest  # noqa: E402
@@ -120,7 +121,7 @@ class GpioTest(unittest.TestCase):
         regs = {gpio.GPFSEL[2]: 1 << (3 * 7)}  # GPIO27 output
         fake = FakeQTest(path, regs)
         fake.start()
-        g = gpio.Gpio(gpio.QTest(path), lambda s: None, hz=5)
+        g = gpio.Gpio(gpio.QTest(vm.connect(path)), lambda s: None, hz=5)
         with self.assertRaises(PermissionError):
             g.qt.readl(0x3F000000)
         with self.assertRaises(PermissionError):
@@ -171,6 +172,44 @@ class ImageTest(unittest.TestCase):
             self.assertEqual(vm.img_partuuid(f.name), "719289eb-02")
 
 
+class FatTest(unittest.TestCase):
+    """fixtures/fat{16,32}.img.gz: mkfs.fat + mcopy images (config.txt, kernel8.img (10000 random bytes), user-data,
+    20 long-named files with one deleted), so the root folder spans clusters on FAT32."""
+
+    def test_read_and_overwrite(self):
+        for kind in ("fat16", "fat32"):
+            with self.subTest(kind), tempfile.TemporaryDirectory() as d:
+                img = Path(d) / "boot.img"
+                img.write_bytes(gzip.decompress((Path(__file__).parent / f"fixtures/{kind}.img.gz").read_bytes()))
+                with open(img, "r+b") as f:
+                    fat = image.Fat(f, 0)
+                    self.assertEqual(fat.fat32, kind == "fat32")
+                    self.assertEqual(fat.read("config.txt"), b"arm_64bit=1\n")
+                    self.assertEqual(fat.read("CONFIG.TXT"), b"arm_64bit=1\n")
+                    kernel = fat.read("kernel8.img")
+                    self.assertEqual(len(kernel), 10000)
+                    self.assertEqual(fat.read("verylongname-number-20.txt"), b"x\n")
+                    with self.assertRaises(FileNotFoundError):
+                        fat.read("verylongname-number-3.txt")  # deleted
+                    free = sum(fat.entry(c) == 0 for c in range(2, fat.nclus + 2))
+                    big = os.urandom(3 * fat.csize + 7)
+                    fat.write("user-data", big)
+                    self.assertEqual(fat.read("user-data"), big)
+                with open(img, "r+b") as f:  # from disk again, both FAT copies
+                    fat = image.Fat(f, 0)
+                    self.assertEqual(fat.read("user-data"), big)
+                    self.assertEqual(fat.read("kernel8.img"), kernel)
+                    self.assertEqual(fat.read("zz-last-file.txt"), b"#cloud-config\nhostname: raspberrypi\n")
+                    self.assertEqual(sum(fat.entry(c) == 0 for c in range(2, fat.nclus + 2)), free - 3)
+                    f.seek(fat.fatpos + fat.fatlen)
+                    self.assertEqual(f.read(fat.fatlen), fat.fat)
+                    fat.write("user-data", b"")
+                    self.assertEqual(fat.read("user-data"), b"")
+                    self.assertEqual(sum(fat.entry(c) == 0 for c in range(2, fat.nclus + 2)), free + 1)
+                    with self.assertRaises(FileNotFoundError):
+                        fat.write("new-file", b"x")
+
+
 class VmTest(unittest.TestCase):
     def test_resolve_and_argv(self):
         h = {"accels": ["hvf", "tcg"], "gpus": ["venus", "soft"]}
@@ -203,7 +242,33 @@ class VmTest(unittest.TestCase):
         p = " ".join(vm.build_argv("qemu", {**c, "network": False}, d, d, {"ssh": 1, "ws": 2, "vnc": 5901}, "provision"))
         self.assertIn("if=sd", p)  # no Zero Lab kernel: the image's own kernel on the SD path
         self.assertIn("restrict=on", p)
+        self.assertIn(f"-qmp unix:{d}/qmp.sock,server=on,wait=off", p)
         self.assertIn("virtio-gpu-device", p)
+        self.assertIn("-qtest-log none", p)
+
+    def test_tcp_channels(self):
+        """Windows: no AF_UNIX in Python, so QEMU's serial, QMP and QTest listen on loopback ports."""
+        ports = {"ssh": 1, "ws": 2, "vnc": 5901, "serial": 4001, "qmp": 4002, "qtest": 4003}
+        d = Path(tempfile.mkdtemp())
+        mbr = bytearray(512)
+        mbr[510:512] = b"\x55\xaa"
+        (d / "base.img").write_bytes(mbr)
+        old, vm.UNIX_SOCKETS = vm.UNIX_SOCKETS, False
+        try:
+            s = " ".join(vm.build_argv("qemu", vm.resolve({}, {"accels": ["tcg"], "gpus": ["soft"]}), d, d, ports))
+            chan = vm.channels(d, ports)
+        finally:
+            vm.UNIX_SOCKETS = old
+        self.assertIn("socket,id=uart,host=127.0.0.1,port=4001,server=on,wait=off", s)
+        self.assertIn("-qmp tcp:127.0.0.1:4002,server=on,wait=off", s)
+        self.assertIn("-qtest tcp:127.0.0.1:4003,server=on,wait=off", s)
+        self.assertNotIn(".sock", s)
+        srv = socket.create_server(("127.0.0.1", 0))
+        conn = vm.connect(("127.0.0.1", srv.getsockname()[1]), timeout=1)
+        self.assertIsNotNone(conn)
+        conn.close()
+        srv.close()
+        self.assertEqual(chan["qtest"], ("127.0.0.1", 4003))
 
 
 class ReadinessTest(unittest.TestCase):
@@ -375,6 +440,18 @@ class FakeFiles:
 
     def __getattr__(self, name):  # mkdir, rename, delete, terminal
         return lambda *a: self.calls.append((name, *a))
+
+
+class LockTest(unittest.TestCase):
+    def test_one_engine_per_data_folder(self):
+        d = Path(tempfile.mkdtemp())
+        first = server.lock_data(d)
+        self.assertIsNotNone(first)
+        self.assertIsNone(server.lock_data(d))  # a second engine on the same Pi disks is refused
+        first.close()
+        again = server.lock_data(d)
+        self.assertIsNotNone(again)
+        again.close()
 
 
 class ServerTest(unittest.TestCase):

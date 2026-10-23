@@ -1,7 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Install Zero Lab
-Comment=Builds and installs Zero Lab (asks for your password to install build tools)
-Exec=bash -c "cd \\"\\$(dirname \\"\\$0\\")\\" && bash setup.sh; echo; read -r -p 'Press Enter to close ' x" %k
-Icon=utilities-terminal
-Terminal=true

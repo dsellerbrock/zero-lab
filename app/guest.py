@@ -5,6 +5,7 @@ inside the guest by guest/run-project.sh. Nothing from a project executes on the
 """
 import io
 import json
+import os
 import subprocess
 import tarfile
 import threading
@@ -21,6 +22,12 @@ ExecStart=/bin/sh /home/{user}/.zerolab/run-project.sh /home/{user}/zerolab/proj
 [Install]
 WantedBy=graphical.target
 """
+
+
+def openssh(tool):
+    """Windows' built-in OpenSSH client (System32\\OpenSSH, installed by default since Windows 10 1809), else PATH."""
+    exe = Path(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "OpenSSH", tool + ".exe")
+    return str(exe) if os.name == "nt" and exe.exists() else tool
 
 
 def safe_name(rel):
@@ -53,9 +60,9 @@ class Guest:
         self.proc = None
 
     def ssh_argv(self, command):
-        return ["ssh", "-i", str(self.key), "-p", str(self.port),
+        return [openssh("ssh"), "-i", str(self.key), "-p", str(self.port),
                 # Loopback forward to our own VM, and the host key changes on every reprovision.
-                "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
+                "-o", "StrictHostKeyChecking=no", "-o", f"UserKnownHostsFile={os.devnull}",
                 "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "-o", "LogLevel=ERROR",
                 f"{self.user}@127.0.0.1", command]
 
@@ -104,7 +111,6 @@ class Guest:
 
 
 # ---------- file browser (the Files sidebar) ----------
-import os  # noqa: E402
 import posixpath  # noqa: E402
 import shlex  # noqa: E402
 
@@ -150,7 +156,7 @@ def open_exclusive(folder, name):
         cand = name if n == 1 else f"{stem} ({n}){dot}{ext}"
         path = os.path.join(folder, cand)
         try:
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o644)
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0), 0o644)
             return os.fdopen(fd, "wb"), path
         except FileExistsError:
             continue
