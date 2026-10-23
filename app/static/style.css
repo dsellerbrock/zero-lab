@@ -196,7 +196,13 @@ input[type=checkbox], input[type=radio] { accent-color: var(--board); width: 16p
 .knob { width: 50px; height: 50px; border-radius: 50%; background: conic-gradient(var(--board) var(--a), var(--hole) 0);
         display: grid; place-items: center; cursor: ns-resize; }
 .knob div { width: 36px; height: 36px; border-radius: 50%; background: var(--paper); display: grid; place-items: center; font: 13px var(--mono); }
-svg.seg7 polygon { fill: #3a2a2a; } svg.seg7 polygon.on { fill: #ff3b30; }
+.slider { width: 120px; accent-color: var(--board); } .slider + output { display: inline-block; width: 4ch; margin-left: 6px; font: 13px var(--mono); }
+svg.seg7 polygon, .seg4 circle { fill: #3a2a2a; } svg.seg7 polygon.on, .seg4 circle.on { fill: #ff3b30; }
+.seg4 { display: flex; gap: 3px; align-items: end; background: #1c1414; padding: 6px; border-radius: var(--r-s); }
+.seg4[data-blink="1"] { animation: zl-blink .5s steps(1) infinite; } .seg4[data-blink="2"] { animation: zl-blink 1s steps(1) infinite; }
+.seg4[data-blink="3"] { animation: zl-blink 2s steps(1) infinite; } @keyframes zl-blink { 50% { visibility: hidden; } }
+.lcd { font: 15px/1.25 var(--mono); white-space: pre; background: #3d5a1e; color: #13200a; padding: 6px 8px; border-radius: var(--r-s); }
+.lcd.lit { background: #a6d65a; } .lcd div { height: 1.25em; width: 16ch; } .lcd .cur { text-decoration: underline; }
 canvas.probe { background: var(--console); border-radius: var(--r-s); }
 
 /* ---------- settings drawer ---------- */

@@ -6,7 +6,7 @@
 
 Steps: (optional) add+provision an image; boot; wait for the desktop; screenshot; GPIO round trip
 (widget-style drive -> guest program reads it -> guest drives LED pin -> host sees it) with both
-samples; stop. Prints one JSON summary line; exit status 0 only if every step passed.
+samples; analog knob via the MCP3008 ADC; I2C 7-segment and LCD; stop. Prints one JSON summary line; exit status 0 only if every step passed.
 """
 import argparse
 import hashlib
@@ -195,8 +195,44 @@ def main():
         step(f"knob-py:value={value}", line(f"knob={value}", m))
     c.call("/api/project/stop", {})
 
+    # Analog knob: the fork's MCP3008 on SPI0 CE0, read with gpiozero; the program prints adc= at start and on change
+    m = c.mark()
+    run_sample("adc-knob-py")
+    for value in (0, 512, 1023):
+        c.call("/api/adc", {"channel": 0, "value": value})
+        e = c.wait(lambda e: e["type"] == "proc" and e.get("line", "").startswith("adc=")
+                   and abs(float(e["line"].split("=")[1]) - value / 1023) <= 0.02, 10, m)
+        step(f"adc-knob-py:ch0={value}", e, line=e and e["line"].strip())
+        m = c.mark()
+    c.call("/api/project/stop", {})
+
+    # I2C displays: what the guest writes to /dev/i2c-1 is what /api/i2c (the widgets' source) reports
+    font = {0x3F: "0", 0x06: "1", 0x5B: "2", 0x4F: "3", 0x66: "4", 0x6D: "5", 0x7D: "6", 0x07: "7", 0x7F: "8", 0x6F: "9"}
+
+    def guest_line(prefix):
+        m = c.mark()  # the next line, so the display is checked right after the guest wrote it
+        e = c.wait(lambda e: e["type"] == "proc" and e.get("line", "").startswith(prefix), 10, m)
+        return e and e["line"].strip()[len(prefix):]
+
+    run_sample("seg7-i2c-py")
+    for _ in range(3):
+        want, seg = guest_line("count="), c.call("/api/i2c")["seg7"]
+        ram = bytes.fromhex(seg["ram"])
+        shown = "".join(font.get(ram[a] & 0x7F, "?") for a in (0, 2, 6, 8))
+        ok = want and seg["display-on"] and shown in (want, f"{(int(want) + 1) % 10000:04d}")
+        step(f"seg7-i2c-py:count={want}", ok, shown=shown)
+    c.call("/api/project/stop", {})
+
+    run_sample("lcd-i2c-py")
+    for _ in range(3):
+        clock, lcd = guest_line("clock="), c.call("/api/i2c")["lcd"]
+        rows = bytes.fromhex(lcd["text"]).decode("latin-1")
+        ok = clock and lcd["backlight"] and rows == "Hello, Zero Lab!" + clock.ljust(16)
+        step(f"lcd-i2c-py:clock={clock}", ok, rows=[rows[:16], rows[16:]])
+    c.call("/api/project/stop", {})
+
     # 7-segment: the guest's segment pins match the digit it announces
-    segs, digits = (21, 20, 16, 12, 7, 8, 25), ["1111110", "0110000", "1101101", "1111001", "0110011",
+    segs, digits = (21, 20, 16, 12, 24, 23, 25), ["1111110", "0110000", "1101101", "1111001", "0110011",
                                                   "1011011", "1011111", "1110000", "1111111", "1111011"]
     m = run_sample("seven-segment-py")
     seen = set()

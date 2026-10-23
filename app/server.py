@@ -35,6 +35,11 @@ TYPES = {".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".s
          ".png": "image/png", ".json": "application/json", ".ico": "image/x-icon"}
 
 
+# The fork's I2C displays on I2C1 and the QOM state Zero Lab draws them from.
+I2C_PARTS = {"seg7": "/machine/ht16k33", "lcd": "/machine/lcd1602"}
+I2C_PROPS = {"ram", "oscillator", "display-on", "blink", "brightness", "text", "cursor", "cursor-on", "backlight"}
+
+
 def default_data_dir():
     if platform.system() == "Darwin":
         return Path.home() / "Library/Application Support/Zero Lab"
@@ -196,6 +201,14 @@ class App:
         self.guest = guest.Guest(d / "ssh/id_ed25519", self.vm.ports["ssh"], st["user"])
         threading.Thread(target=self.attach_gpio, daemon=True).start()
 
+    def i2c_state(self):
+        """{"seg7": {...}, "lcd": {...}} from one qom-list-get."""
+        if self.vm.status != "running":
+            raise RuntimeError("VM is not running")
+        objs = self.vm.qmp("qom-list-get", paths=list(I2C_PARTS.values()))
+        return {k: {p["name"]: p.get("value") for p in o["properties"] if p["name"] in I2C_PROPS}
+                for k, o in zip(I2C_PARTS, objs)}
+
     def attach_gpio(self):
         if vmod.wait_for(self.vm.run / "qtest.sock", self.vm.proc, 30):
             self.gpio = gpio.Gpio(gpio.QTest(str(self.vm.run / "qtest.sock")), self.on_pins)
@@ -356,6 +369,12 @@ def make_handler(app, token, port):
                         self.reply(200, out)
                     except (ValueError, RuntimeError, subprocess.TimeoutExpired) as e:
                         self.reply(400, {"error": str(e)})
+            elif path == "/api/i2c":
+                if self.guard(True):
+                    try:
+                        self.reply(200, app.i2c_state())
+                    except (RuntimeError, OSError) as e:
+                        self.reply(400, {"error": str(e)})
             elif path == "/api/readiness":
                 if self.guard(True):
                     self.reply(200, app.readiness())
@@ -480,6 +499,13 @@ def make_handler(app, token, port):
                 if not app.gpio:
                     raise RuntimeError("VM is not running")
                 app.gpio.drive(int(b["pin"]), 1 if b["level"] else 0)
+            elif path == "/api/adc":  # the fork's MCP3008 on SPI0 CE0
+                ch, value = int(b["channel"]), int(b["value"])
+                if not (0 <= ch < 8 and 0 <= value <= 1023):
+                    raise ValueError("channel must be 0-7 and value 0-1023")
+                if app.vm.status != "running":
+                    raise RuntimeError("VM is not running")
+                app.vm.qmp("qom-set", path="/machine/mcp3008", property=f"ch{ch}", value=value)
             elif path == "/api/serial":
                 app.vm.serial_write(str(b["text"]))
             elif path == "/api/image/add":

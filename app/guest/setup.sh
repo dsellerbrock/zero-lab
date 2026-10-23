@@ -43,6 +43,9 @@ if [ -f /usr/bin/labwc-pi ]; then
     sed -i '/^exec .*labwc/ i\export WLR_NO_HARDWARE_CURSORS=1' /usr/bin/labwc-pi
 fi
 
+# /dev/i2c-1 for the emulated I2C displays (dtparam=i2c_arm=on needs i2c-dev, as raspi-config adds to /etc/modules)
+modprobe i2c-dev 2>/dev/null || true
+
 systemctl start ssh 2>/dev/null && mark ZL_SSH_READY
 
 # Tell the app when the desktop panel and file manager are up (boot-time measurement).
