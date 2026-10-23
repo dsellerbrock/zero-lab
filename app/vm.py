@@ -99,12 +99,31 @@ def qemu_env(qdir):
     return env
 
 
-def build_argv(qemu, cfg, img, run, ports, mode="desktop"):
-    """mode: 'desktop' (normal use) or 'provision' (first boot, headless, SD root).
+def virtio_kernel():
+    """Zero Lab's Pi kernel: the Raspberry Pi OS rpi-v8 kernel, same version and config, with virtio-mmio,
+    virtio-blk and virtio-gpu built in (the stock kernel has no virtio at all, so no screen and no fast disk).
+    Built by kernel/build.sh; it sits next to app/ in the Mac bundle, the Linux install and a checkout."""
+    p = Path(os.environ.get("ZL_KERNEL") or APP.parent / "kernel/kernel8-virtio.img")
+    return p if p.is_file() else None
+
+
+def kernel_version(path):
+    """'6.18.50+rpt-rpi-v8' from an arm64 Image (plain or gzip, as Pi OS ships kernel8.img), or None."""
+    data = Path(path).read_bytes()
+    if data[:2] == b"\x1f\x8b":
+        data = gzip.decompress(data)
+    m = re.search(rb"Linux version (\S+)", data)
+    return m.group(1).decode() if m else None
+
+
+def build_argv(qemu, cfg, img, run, ports, mode="desktop", kernel=None):
+    """mode: 'desktop' (normal use) or 'provision' (first boot, headless).
+    kernel: Zero Lab's virtio kernel; without it, the image's own kernel boots from the slow SD path
+    and the Pi has no screen.
 
     Mirrors raspi-zero2w/start-pi.sh --desktop; see that script for the why of each flag.
     """
-    virtio_root = mode == "desktop" and (img / "initramfs-virtio").exists()
+    virtio_root = kernel is not None
     append = [f"root=PARTUUID={img_partuuid(img / 'base.img')}", "rootfstype=ext4", "rw", "rootwait",
               "console=tty1", "console=ttyAMA1,115200",
               # QEMU's DWC2 enumerates reliably with the FIQ off
@@ -133,7 +152,7 @@ def build_argv(qemu, cfg, img, run, ports, mode="desktop"):
 
     disk = f"file={img / 'disk.qcow2'},format=qcow2,snapshot={'on' if cfg['snapshot'] else 'off'}"
     argv = [str(qemu), "-name", "Zero Lab", "-M", "raspi3ap", "-m", f"{cfg['ram']}M",
-            "-smp", str(cfg["cpus"]), "-kernel", str(img / "kernel8.img"),
+            "-smp", str(cfg["cpus"]), "-kernel", str(kernel or img / "kernel8.img"),
             "-dtb", str(run / "boot.dtb"),
             "-chardev", f"socket,id=uart,path={run / 'serial.sock'},server=on,wait=off,logfile={run / 'serial.log'}",
             "-serial", "chardev:uart",
@@ -141,9 +160,8 @@ def build_argv(qemu, cfg, img, run, ports, mode="desktop"):
             "-qtest", f"unix:{run / 'qtest.sock'},server=on,wait=off",
             "-usb", "-device", "usb-kbd", "-device", "usb-tablet"]
     argv += ["-accel", "hvf"] if cfg["accel"] == "hvf" else ["-accel", "tcg,thread=multi"]
-    if virtio_root:
-        argv += ["-initrd", str(img / "initramfs-virtio"),
-                 "-drive", f"if=none,id=root,cache=writeback,{disk}",
+    if virtio_root:  # raspi-zero2w 5fbae66: virtio-blk on the second virtio-mmio slot, write-back cache
+        argv += ["-drive", f"if=none,id=root,cache=writeback,{disk}",
                  "-device", "virtio-blk-device,bus=virtio-mmio-bus.1,drive=root"]
     else:
         argv += ["-drive", f"if=sd,{disk}"]
@@ -163,8 +181,8 @@ def build_argv(qemu, cfg, img, run, ports, mode="desktop"):
         argv += ["-display", "cocoa" if platform.system() == "Darwin" else "sdl"]
     else:
         argv += ["-display", "egl-headless" if gpu == "virgl" else "none"]
-        argv += ["-vnc", f"127.0.0.1:{ports['vnc'] - 5900},websocket=127.0.0.1:{ports['ws']}"
-                 + (",display=gpu0" if gpu == "virgl" else "")]
+        # display=gpu0: console 0 is the BCM2835 framebuffer (disabled in the DTB), so without it VNC is black
+        argv += ["-vnc", f"127.0.0.1:{ports['vnc'] - 5900},websocket=127.0.0.1:{ports['ws']},display=gpu0"]
     argv += ["-append", " ".join(append), "-no-reboot"]
     return argv
 
@@ -267,10 +285,11 @@ class VM:
             if setup_script:
                 props["zl-setup"] = base64.b64encode(gzip.compress(setup_script.encode(), mtime=0)).decode()
             gpu = cfg["gpu"] if mode == "desktop" else "soft"
-            root = "virtio" if mode == "desktop" and (img / "initramfs-virtio").exists() else "sd"
+            kernel = virtio_kernel()
+            root = "virtio" if kernel else "sd"
             (self.run / "boot.dtb").write_bytes(
                 fdt.qemu_dtb((img / "stock.dtb").read_bytes(), gpu, root, props))
-            argv = build_argv(qemu, cfg, img, self.run, self.ports, mode)
+            argv = build_argv(qemu, cfg, img, self.run, self.ports, mode, kernel)
             (self.run / "argv.json").write_text(json.dumps(argv, indent=1))
             log = open(self.run / "qemu.log", "wb")
             self.proc = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=log, stderr=log,

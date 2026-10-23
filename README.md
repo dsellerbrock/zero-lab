@@ -18,7 +18,7 @@ Zero Lab runs on **[qemu-raspi-zero2w](https://github.com/dsellerbrock/qemu-rasp
 Downloads: https://pisim.ellerbrock.dev. Instructions for friends: [docs/FRIENDS.md](docs/FRIENDS.md).
 
 ## What's in the window
-- **First run.** A checklist shows what the Pi needs (emulator, speed-up, graphics, Raspberry Pi OS, user, disk space), and three steps download and set up the official image. You never download a kernel or firmware; they come from the image.
+- **First run.** A checklist shows what the Pi needs (emulator, speed-up, graphics, Raspberry Pi OS, user, disk space), and three steps download and set up the official image. No Pi firmware is needed. Zero Lab ships the Pi OS kernel rebuilt with virtio built in (screen and fast disk; recipe in [kernel/](kernel)), and the device tree comes from the image.
 - **The Pi's screen**, through noVNC over QEMU's VNC websocket.
 - **GPIO breadboard.** A 40-pin header shown by physical position, plus parts you can drag onto it. Layouts save as JSON in `~/Library/Application Support/Zero Lab/layouts` (Linux: `~/.local/share/zero-lab/layouts`).
 - **Files sidebar.** Browse the Pi's file system; drop files in; download files and folders to `~/Downloads`.
@@ -71,6 +71,7 @@ app/            server.py (stdlib HTTP + SSE + VNC websocket pipe), vm.py (QEMU 
 mac/            ZeroLab.swift (window), build-bundle.sh (deps -> qemu -> app -> dmg), relocate.py
 linux/ windows/ installers
 samples/        one program + layout per GPIO part
+kernel/         build.sh + config for the Pi kernel (Pi OS 6.18.50 with virtio built in)
 tools/          source-bundle.sh (GPL sources), make-linux-windows-bundle.sh, shoot.sh (screenshots)
 ```
 
@@ -81,6 +82,6 @@ tools/          source-bundle.sh (GPL sources), make-linux-windows-bundle.sh, sh
 
 ## Licence and source
 Zero Lab is GPL-2.0-or-later.
-- **Source.** This repo and [qemu-raspi-zero2w](https://github.com/dsellerbrock/qemu-raspi-zero2w). Every release also carries the exact sources it was built from: the "Source code (GPL)" folder on the dmg and `sources/` in the zip.
+- **Source.** This repo and [qemu-raspi-zero2w](https://github.com/dsellerbrock/qemu-raspi-zero2w). The Pi kernel's source is a separate release asset (`…-kernel-source.tar`), or run `kernel/build.sh source`. Every release also carries the exact sources it was built from: the "Source code (GPL)" folder on the dmg and `sources/` in the zip.
 - **Third-party components.** [THIRD-PARTY.md](THIRD-PARTY.md).
 - **Raspberry Pi OS** is downloaded from raspberrypi.com and is not included. "Raspberry Pi" is a trademark of Raspberry Pi Ltd. Zero Lab is not affiliated with Raspberry Pi Ltd.

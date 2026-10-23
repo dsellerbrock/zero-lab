@@ -86,6 +86,7 @@ install_app() {
   rm -rf "$DEST/app"; cp -R "$HERE/zero-lab/app" "$DEST/app"
   cp "$HERE/zero-lab/icon.png" "$DEST/icon.png"
   rm -rf "$DEST/samples"; cp -R "$HERE/zero-lab/samples" "$DEST/samples"
+  rm -rf "$DEST/kernel"; cp -R "$HERE/zero-lab/kernel" "$DEST/kernel"
   mkdir -p "$HOME/.local/bin"
   cat > "$HOME/.local/bin/zero-lab" <<EOF
 #!/bin/sh

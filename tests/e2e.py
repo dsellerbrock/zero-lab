@@ -17,9 +17,21 @@ import sys
 import threading
 import time
 import urllib.request
+import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def png_colours(path):
+    """Distinct byte values in a PNG's pixel data (zlib over the IDAT chunks)."""
+    b, raw, i = path.read_bytes(), b"", 8
+    while i < len(b):
+        n = int.from_bytes(b[i:i + 4], "big")
+        if b[i + 4:i + 8] == b"IDAT":
+            raw += b[i + 8:i + 8 + n]
+        i += 12 + n
+    return len(set(zlib.decompress(raw)))
 
 
 class Client:
@@ -109,7 +121,7 @@ def main():
 
     time.sleep(20)  # let the desktop settle before the screenshot
     shot = c.call("/api/screenshot", {})["path"]
-    step("screenshot", Path(shot).exists(), path=shot)
+    step("screenshot", png_colours(Path(shot)) > 16, path=shot)  # a black or blank screen has 1-2
 
     # Files sidebar: copy a file in, list it, copy it back out, compare
     blob = os.urandom(2 * 1024 * 1024)
@@ -133,7 +145,10 @@ def main():
         m = c.mark()
         c.call("/api/project/run", {})
         e = c.wait(lambda e: e["type"] == "proc" and ("Ready" in e.get("line", "") or e.get("state") == "exited"), 1800, m)
-        step(f"{sample}:started", e and "Ready" in e.get("line", ""), last=e)
+        ok = e and "Ready" in e.get("line", "")
+        with c.cond:
+            out = [x.get("line") for x in c.events[m:] if x["type"] == "proc" and "line" in x]
+        step(f"{sample}:started", ok, last=e, **({} if ok else {"output": out[-25:]}))
         return c.mark()
 
     def line(prefix, m, timeout=10):

@@ -5,6 +5,7 @@ Zero Lab's own code is GPL-2.0-or-later (see LICENSE); its source is https://git
 | Component | Version | Licence | Where | Source |
 |---|---|---|---|---|
 | QEMU fork [qemu-raspi-zero2w](https://github.com/dsellerbrock/qemu-raspi-zero2w) (GPIO events, raspi3ap virtio-mmio, HVF 4 KiB granule, Venus) | d4fa079b | GPL-2.0 | all | `qemu-zero-lab-<commit>.tar.xz` in the source folder, and https://github.com/dsellerbrock/qemu-raspi-zero2w |
+| Linux kernel, Raspberry Pi OS rpi-v8 with virtio built in (`kernel/kernel8-virtio.img`) | 6.18.50-1+rpt1 | GPL-2.0 | all | release asset `Zero-Lab-<version>-kernel-source.tar` (the Debian source package from archive.raspberrypi.com plus `kernel/config` and `kernel/build.sh`) |
 | virglrenderer (Venus) | pinned commit | MIT | all | `virglrenderer-<commit>.tar.xz` |
 | libepoxy | pinned commit | MIT | macOS | `libepoxy-<commit>.tar.xz` |
 | GLib | 2.90.1 | LGPL-2.1-or-later | macOS (dynamic library, replaceable) | `glib-2.90.1.tar.xz` |
@@ -19,4 +20,4 @@ Zero Lab's own code is GPL-2.0-or-later (see LICENSE); its source is https://git
 
 On Linux and Windows (WSL), QEMU and virglrenderer are built from the bundled sources on your machine, and the other libraries come from your distribution.
 
-Raspberry Pi OS is not included. Zero Lab downloads it from raspberrypi.com, where it is offered under its own licences. "Raspberry Pi" is a trademark of Raspberry Pi Ltd. Zero Lab is not affiliated with Raspberry Pi Ltd.
+Raspberry Pi OS itself is not included. Zero Lab downloads it from raspberrypi.com, where it is offered under its own licences. "Raspberry Pi" is a trademark of Raspberry Pi Ltd. Zero Lab is not affiliated with Raspberry Pi Ltd.

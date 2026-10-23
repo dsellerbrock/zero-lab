@@ -3,7 +3,7 @@
 Layout of an image dir:
   base.img          the image as downloaded (read-only after prep; APFS/reflink clone of local files)
   disk.qcow2        persistent overlay on base.img, grown to 16 GiB (cloud-init grows the root fs)
-  kernel8.img, stock.dtb, initramfs-virtio   boot files (the last one is rebuilt in the guest)
+  kernel8.img, stock.dtb   the image's own kernel (for its version) and device tree
   ssh/id_ed25519    key the app uses to push and run projects
   state.json
 """
@@ -239,16 +239,3 @@ def prepare(source, imgdir, user, password, qemu_img, progress):
     (imgdir / "state.json").write_text(json.dumps(state))
     progress("prepare", 1, 1)
     return state
-
-
-def extract_initramfs(imgdir, qemu_img):
-    """After the first boot: copy the guest-rebuilt initramfs (with virtio drivers) out of the overlay."""
-    off, size = bootfs_extent(imgdir / "base.img")
-    part = imgdir / "bootfs.raw"
-    try:
-        subprocess.run([str(qemu_img), "dd", "-f", "qcow2", "-O", "raw", f"if={imgdir / 'disk.qcow2'}", f"of={part}",
-                        "bs=512", f"skip={off // 512}", f"count={size // 512}"], check=True, capture_output=True)
-        with BootFS(part, whole=True) as fs:
-            fs.get("initramfs8", imgdir / "initramfs-virtio")
-    finally:
-        part.unlink(missing_ok=True)

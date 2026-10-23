@@ -1,3 +1,5 @@
 build/
 __pycache__/
 *.pyc
+kernel/kernel8-virtio.img
+kernel/src/

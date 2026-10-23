@@ -22,7 +22,7 @@ def qemu_probe(paths_fn, env_fn):
         return False, str(e)
 
 
-def check(host, qemu, images, active, busy, free_bytes, catalog):
+def check(host, qemu, images, active, busy, free_bytes, catalog, kernel=(None, None)):
     """host: vm.host(); qemu: (ok, text); images: App.images(); active: name of the image to boot or None;
     busy: provisioning message or None; free_bytes: free space where images live."""
     rows = []
@@ -63,12 +63,21 @@ def check(host, qemu, images, active, busy, free_bytes, catalog):
             {"action": "download", "label": f"Download ({desktop['size'] / 1e9:.1f} GB)",
              "alt": {"action": "choose", "label": "Choose file"}})
 
-    # Kernel + device tree: copied out of the image's own boot partition; QEMU boots the kernel directly.
-    have_boot = bool(img) and img.get("boot_files", False)
-    row("kernel", "Kernel and device tree", "ok" if have_boot else "waiting",
-        "Taken from your Pi OS image." if have_boot else
-        "Come from the Pi OS image. Nothing to download separately, and no Pi firmware is needed.", True,
-        short="Ready" if have_boot else "From the image")
+    # Kernel: Zero Lab ships the Pi OS kernel rebuilt with virtio (screen + fast disk); the device tree comes
+    # from the image. Its version must match the image's so the image's own modules load.
+    kpath, kver = kernel
+    iver = img.get("kernel_version") if img else None
+    if not kpath:
+        row("kernel", "Kernel and device tree", "missing",
+            "Zero Lab's Pi kernel is missing from this install. Reinstall Zero Lab.", True, short="Missing")
+    elif iver and kver and iver != kver:
+        row("kernel", "Kernel and device tree", "warn",
+            f"This image's kernel is {iver}; Zero Lab's is {kver}. Use the official 2026-10-06 image for a working desktop.",
+            False, short="Version differs")
+    else:
+        row("kernel", "Kernel and device tree", "ok",
+            f"Included with Zero Lab ({kver}, with virtio for the screen and fast disk); the device tree comes from"
+            " the Pi OS image. Nothing to download separately.", True, short="Included")
 
     if img and img.get("provisioned"):
         row("user", "Your Pi user", "ok", f"Set up on first boot (user “{img.get('user', 'pi')}”).", True)

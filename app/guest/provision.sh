@@ -30,15 +30,6 @@ chmod 600 /etc/NetworkManager/system-connections/zero-lab-usb.nmconnection
 systemctl enable ssh >/dev/null 2>&1 && mark ZL_SSH_ENABLED
 raspi-config nonint do_boot_behaviour B4 && mark ZL_AUTOLOGIN
 
-# The stock kernel has virtio as modules only: put them in the initramfs so later boots use virtio-blk root.
-for m in virtio_mmio virtio_blk virtio_gpu; do grep -qx "$m" /etc/initramfs-tools/modules || echo "$m" >> /etc/initramfs-tools/modules; done
-grep -q '^COMPRESSLEVEL=' /etc/initramfs-tools/initramfs.conf || echo 'COMPRESSLEVEL=3' >> /etc/initramfs-tools/initramfs.conf
-# MODULES=dep can't determine the root device in this boot mode ("failed to determine device for /");
-# initramfs-tools' own suggested workaround is MODULES=most.
-sed -i 's/^MODULES=.*/MODULES=most/' /etc/initramfs-tools/initramfs.conf
-mark ZL_INITRAMFS_BEGIN
-update-initramfs -u -k "$(uname -r)" > /run/zl-initramfs.log 2>&1 || mark "ZL_PROVISION_WARN initramfs: $(tail -n 2 /run/zl-initramfs.log | tr '\n' ' ')"
-lsinitramfs /boot/firmware/initramfs8 2>/dev/null | grep -q 'virtio_blk' && mark ZL_VIRTIO_INITRAMFS_OK
 sync
 mark ZL_PROVISIONED
 systemctl poweroff

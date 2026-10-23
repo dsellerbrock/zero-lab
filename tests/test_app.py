@@ -174,8 +174,7 @@ class VmTest(unittest.TestCase):
         mbr = bytearray(512)
         mbr[510:512] = b"\x55\xaa"
         (d / "base.img").write_bytes(mbr)
-        (d / "initramfs-virtio").write_bytes(b"x")
-        a = vm.build_argv("qemu", c, d, d, {"ssh": 2222, "ws": 5701, "vnc": 5999})
+        a = vm.build_argv("qemu", c, d, d, {"ssh": 2222, "ws": 5701, "vnc": 5999}, kernel=Path("/k/virtio.img"))
         s = " ".join(a)
         self.assertIn("-accel hvf", s)
         self.assertIn("venus=on", s)
@@ -190,10 +189,13 @@ class VmTest(unittest.TestCase):
                      "snapshot=off", "root=PARTUUID="):
             self.assertIn(want, s)
         self.assertNotIn("rpi-resize-swap-file", s)  # virtio root keeps Pi OS swap (zram)
-        soft = " ".join(vm.build_argv("qemu", {**c, "gpu": "soft"}, d, d, {"ssh": 1, "ws": 2, "vnc": 5901}))
+        soft = " ".join(vm.build_argv("qemu", {**c, "gpu": "soft"}, d, d, {"ssh": 1, "ws": 2, "vnc": 5901}, kernel=Path("/k")))
         self.assertIn("virtio-gpu-device,bus=virtio-mmio-bus.0", soft)
+        self.assertIn("-kernel /k/virtio.img", s)
+        self.assertIn(",display=gpu0", s)  # VNC must show virtio-gpu, not the disabled BCM framebuffer
+        self.assertNotIn("-initrd", s)
         p = " ".join(vm.build_argv("qemu", {**c, "network": False}, d, d, {"ssh": 1, "ws": 2, "vnc": 5901}, "provision"))
-        self.assertIn("if=sd", p)
+        self.assertIn("if=sd", p)  # no Zero Lab kernel: the image's own kernel on the SD path
         self.assertIn("restrict=on", p)
         self.assertIn("virtio-gpu-device", p)
 
@@ -201,39 +203,47 @@ class VmTest(unittest.TestCase):
 class ReadinessTest(unittest.TestCase):
     HOST_FAST = {"accels": ["hvf", "tcg"], "gpus": ["venus", "soft"]}
     HOST_SLOW = {"accels": ["tcg"], "gpus": ["soft"]}
-    IMG = {"name": "desktop", "label": "Raspberry Pi OS with desktop", "provisioned": True, "boot_files": True, "user": "pi"}
+    IMG = {"name": "desktop", "label": "Raspberry Pi OS with desktop", "provisioned": True, "boot_files": True, "user": "pi",
+           "kernel_version": "6.18.50+rpt-rpi-v8"}
+    K = (Path("/k"), "6.18.50+rpt-rpi-v8")
 
     def rows(self, r):
         return {x["id"]: x for x in r["rows"]}
 
     def test_nothing_yet(self):
-        r = readiness.check(self.HOST_FAST, (True, "QEMU 11.1"), [], None, None, 100 * readiness.GB, image.CATALOG)
+        r = readiness.check(self.HOST_FAST, (True, "QEMU 11.1"), [], None, None, 100 * readiness.GB, image.CATALOG, self.K)
         rows = self.rows(r)
         self.assertFalse(r["ready"])
         self.assertEqual(rows["image"]["state"], "missing")
         self.assertEqual(rows["image"]["fix"]["action"], "download")
-        self.assertEqual(rows["kernel"]["state"], "waiting")
+        self.assertEqual(rows["kernel"]["state"], "ok")
         self.assertIn("Nothing to download", rows["kernel"]["detail"])
+        no_kernel = readiness.check(self.HOST_FAST, (True, "QEMU"), [self.IMG], "desktop", None, 100 * readiness.GB, image.CATALOG)
+        self.assertEqual(self.rows(no_kernel)["kernel"]["state"], "missing")
+        self.assertFalse(no_kernel["ready"])
+        other = readiness.check(self.HOST_FAST, (True, "QEMU"), [{**self.IMG, "kernel_version": "6.12.1+rpt-rpi-v8"}],
+                                "desktop", None, 100 * readiness.GB, image.CATALOG, self.K)
+        self.assertEqual(self.rows(other)["kernel"]["state"], "warn")
         self.assertEqual(rows["user"]["state"], "waiting")
 
     def test_all_green(self):
-        r = readiness.check(self.HOST_FAST, (True, "QEMU 11.1"), [self.IMG], "desktop", None, 100 * readiness.GB, image.CATALOG)
+        r = readiness.check(self.HOST_FAST, (True, "QEMU 11.1"), [self.IMG], "desktop", None, 100 * readiness.GB, image.CATALOG, self.K)
         self.assertTrue(r["ready"])
         self.assertEqual(r["level"], "ok")
 
     def test_slow_host_still_ready(self):
-        r = readiness.check(self.HOST_SLOW, (True, "QEMU 11.1"), [self.IMG], "desktop", None, 100 * readiness.GB, image.CATALOG)
+        r = readiness.check(self.HOST_SLOW, (True, "QEMU 11.1"), [self.IMG], "desktop", None, 100 * readiness.GB, image.CATALOG, self.K)
         self.assertTrue(r["ready"])
         self.assertEqual(r["level"], "warn")
         self.assertEqual(self.rows(r)["accel"]["state"], "warn")
 
     def test_blockers(self):
-        broken = readiness.check(self.HOST_FAST, (False, "no binary"), [self.IMG], "desktop", None, 100 * readiness.GB, image.CATALOG)
+        broken = readiness.check(self.HOST_FAST, (False, "no binary"), [self.IMG], "desktop", None, 100 * readiness.GB, image.CATALOG, self.K)
         self.assertFalse(broken["ready"])
-        full = readiness.check(self.HOST_FAST, (True, "QEMU"), [self.IMG], "desktop", None, 1 * readiness.GB, image.CATALOG)
+        full = readiness.check(self.HOST_FAST, (True, "QEMU"), [self.IMG], "desktop", None, 1 * readiness.GB, image.CATALOG, self.K)
         self.assertEqual(self.rows(full)["disk"]["state"], "missing")
         self.assertFalse(full["ready"])
-        busy = readiness.check(self.HOST_FAST, (True, "QEMU"), [], None, "setting up desktop", 100 * readiness.GB, image.CATALOG)
+        busy = readiness.check(self.HOST_FAST, (True, "QEMU"), [], None, "setting up desktop", 100 * readiness.GB, image.CATALOG, self.K)
         self.assertEqual(self.rows(busy)["image"]["state"], "waiting")
         self.assertFalse(busy["ready"])
 

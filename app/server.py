@@ -107,6 +107,11 @@ class App:
             except (OSError, ValueError):
                 st = {"provisioned": False, "broken": True}
             entry = next((e for e in image.CATALOG if e["id"] == st.get("source")), None)
+            if "kernel_version" not in st and (d / "kernel8.img").exists():
+                try:
+                    st["kernel_version"] = vmod.kernel_version(d / "kernel8.img")
+                except (OSError, ValueError):
+                    pass
             label = entry["name"] if entry else Path(st.get("source", d.name)).name
             boot = all((d / f).exists() for f in ("kernel8.img", "stock.dtb"))
             out.append({"name": d.name, "label": label, "boot_files": boot, **st})
@@ -115,8 +120,11 @@ class App:
     def readiness(self):
         if not hasattr(self, "_qemu"):  # QEMU doesn't change while the app runs; probe once
             self._qemu = readiness.qemu_probe(vmod.qemu_paths, vmod.qemu_env)
+        if not hasattr(self, "_kernel"):
+            k = vmod.virtio_kernel()
+            self._kernel = (k, vmod.kernel_version(k) if k else None)
         return readiness.check(self.host, self._qemu, self.images(), self.cfg.get("image"), self.busy,
-                               shutil.disk_usage(self.data).free, image.CATALOG)
+                               shutil.disk_usage(self.data).free, image.CATALOG, self._kernel)
 
     def fs(self):
         if not self.guest or self.vm.status != "running":
@@ -151,8 +159,6 @@ class App:
     def on_vm_event(self, kind, **data):
         if kind == "marker":
             self.markers.setdefault(data["name"], threading.Event()).set()
-            if data["name"] == "ZL_SSH_READY" and self.vm.mode == "desktop":
-                threading.Thread(target=self.ensure_fast_disk, daemon=True).start()
             if self.busy:
                 self.hub.emit("provision", stage="first-boot", done=0, total=1, step=data["name"])
         if kind == "status" and data["status"] == "stopped":
@@ -197,31 +203,6 @@ class App:
         self.hub.emit("gpio", fn=[f for f, _ in state[:gpio.HEADER_PINS]],
                       lev=[lv for _, lv in state[:gpio.HEADER_PINS]])
 
-    def ensure_fast_disk(self):
-        """Images whose first boot couldn't build the virtio initramfs get it now, over SSH; next boot uses it."""
-        d, g = self.vm.img, self.guest
-        if not g or (d / "initramfs-virtio").exists():
-            return
-        for _ in range(30):  # sshd starts before the network is up
-            try:
-                g.sh("true", timeout=10)
-                break
-            except (RuntimeError, subprocess.TimeoutExpired):
-                time.sleep(4)
-        try:
-            g.sh("sudo sh -c 'for m in virtio_mmio virtio_blk virtio_gpu; do grep -qx $m /etc/initramfs-tools/modules || "
-                 "echo $m >> /etc/initramfs-tools/modules; done; sed -i s/^MODULES=.*/MODULES=most/ "
-                 "/etc/initramfs-tools/initramfs.conf; update-initramfs -u -k $(uname -r)'", timeout=1800)
-            if g.sh("lsinitramfs /boot/firmware/initramfs8 | grep -c virtio_blk || true").strip() in (b"", b"0"):
-                return
-            data = g.sh("cat /boot/firmware/initramfs8", timeout=300)
-            tmp = d / "initramfs-virtio.part"
-            tmp.write_bytes(data)
-            tmp.rename(d / "initramfs-virtio")
-            self.hub.emit("notice", text="Fast disk access is ready. It takes effect the next time you boot the Pi.")
-        except (RuntimeError, subprocess.TimeoutExpired, OSError) as e:
-            self.hub.emit("notice", text=f"Couldn't set up fast disk access yet: {e}")
-
     def stop(self):
         g = self.guest
         self.vm.stop(poweroff=g.poweroff if g and self.vm.status == "running" else None)
@@ -258,8 +239,6 @@ class App:
             if "ZL_PROVISIONED" not in seen or "ZL_USER_READY" not in seen:
                 raise RuntimeError("the first boot stopped early (got: " + (", ".join(sorted(seen)) or "no progress")
                                    + "). The serial console shows what the Pi printed.")
-            if "ZL_VIRTIO_INITRAMFS_OK" in seen:  # later boots use the fast virtio disk
-                image.extract_initramfs(d, qemu_img)
             st["provisioned"] = True
             (d / "state.json").write_text(json.dumps(st))
             progress("done", 1, 1)
@@ -526,7 +505,7 @@ def make_handler(app, token, port):
             elif path == "/api/screenshot":
                 out = app.vm.run / f"screen-{int(time.time())}.png"
                 ppm = out.with_suffix(".ppm")
-                app.vm.qmp("screendump", filename=str(ppm))
+                app.vm.qmp("screendump", filename=str(ppm), device="gpu0")
                 vmod.ppm_to_png(ppm, out)
                 ppm.unlink()
                 return {"path": str(out)}
