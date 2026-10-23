@@ -247,6 +247,7 @@ class VM:
         self.started = None
         self.serial = None
         self.cfg = None
+        self.mode = self.img = None
         self.lock = threading.Lock()
 
     def set_status(self, status, **extra):
@@ -258,7 +259,7 @@ class VM:
             if self.proc and self.proc.poll() is None:
                 raise RuntimeError("VM already running")
             qemu, _, qdir = qemu_paths()
-            self.cfg, self.ready, self.seen = cfg, ready, set()
+            self.cfg, self.ready, self.seen, self.mode, self.img = cfg, ready, set(), mode, img
             # Short socket dir: AF_UNIX paths are limited to ~104 bytes on macOS.
             self.run = Path(tempfile.mkdtemp(prefix="zl-"))
             self.ports = {"ssh": free_port(), "ws": free_port(), "vnc": free_port()}

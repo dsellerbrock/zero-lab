@@ -213,6 +213,7 @@ function onEvent(m) {
       showProgress(m); setupOpen = false; toast("Disk image ready. Press Boot."); refresh();
     } else showProgress(m);
   } else if (m.type === "images") refresh();
+  else if (m.type === "notice") toast(m.text);
   if (m.type === "provision" && ["first-boot", "error"].includes(m.stage)) api("/api/readiness").then((r) => { ready = r; renderReadiness(); updateControls(); });
 }
 new EventSource(`/api/events?t=${encodeURIComponent(T)}`).onmessage = (e) => onEvent(JSON.parse(e.data));
