@@ -118,8 +118,9 @@ def build_argv(qemu, cfg, img, run, ports, mode="desktop"):
                "systemd.mask=rpi-eeprom-update.service", "systemd.mask=fstrim.service", "systemd.mask=fstrim.timer"]
     # The setup script (desktop) or first-boot script (provision) travels in the DTB and runs as root.
     append += ["systemd.unit=kernel-command-line.target",
-               "systemd.run=\"/bin/sh -c 'tr -d \\\\000 < /proc/device-tree/chosen/zl-setup"
-               " | base64 -d | gzip -dc | /bin/sh'\"",
+               # as raspi-zero2w/start-pi.sh does: base64 -i skips the property's trailing NUL. (An earlier
+               # `tr -d \\000` reached tr as `\\000` and deleted every 0 in the base64, so nothing ran.)
+               "systemd.run=\"/bin/sh -c 'base64 -di /proc/device-tree/chosen/zl-setup | gzip -dc | /bin/sh'\"",
                "systemd.run_success_action=none", "systemd.run_failure_action=none"]
     if mode == "desktop":
         append += ["systemd.show_status=false"]
