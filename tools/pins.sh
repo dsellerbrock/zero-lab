@@ -71,7 +71,7 @@ zl_fetch_koji() { # list dir
   mkdir -p "$2"
   while read -r p s; do
     [ -n "$p" ] || continue
-    [ -f "$2/${p##*/}" ] || curl -fsSL --retry 3 -o "$2/${p##*/}" "$ZL_KOJI/$p"
+    [ -f "$2/${p##*/}" ] || curl -fsSL --retry 5 --retry-all-errors -o "$2/${p##*/}" "$ZL_KOJI/$p"
     echo "$s  $2/${p##*/}" | sha256sum -c --quiet - || { rm -f "$2/${p##*/}"; return 1; }
   done <<< "$1"
 }
