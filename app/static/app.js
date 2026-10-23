@@ -57,7 +57,7 @@ function updateControls() {
   $("run").disabled = $("pstop").disabled = $("autostart").disabled = status !== "running";
   $("code-hint").textContent = status === "running" ? "" : status === "stopped" ? "Boot the Pi to build and run code." : "Code can run once the desktop is up.";
   const st = $("status");
-  st.className = "status " + (busy && !running ? "setup" : status);
+  st.dataset.state = busy && !running ? "setup" : status;  // an attribute, so it can't pick up other classes' styles
   $("status-text").textContent = busy && !running ? "Setting up" : { stopped: "Stopped", booting: "Booting", running: "Running", stopping: "Stopping" }[status];
 }
 
@@ -365,8 +365,9 @@ const STATE_WORD = { ok: "Done", warn: "Optional, works slower", missing: "Neede
 function renderReadiness() {
   if (!ready) return;
   const todo = ready.rows.filter((r) => r.required && r.state !== "ok");
-  $("ready-btn").querySelector(".light").className = "light " + ready.level;
-  $("ready-text").textContent = ready.ready ? (ready.level === "ok" ? "Ready to boot" : "Ready, slower") : `${todo.length} to set up`;
+  const settingUp = !!state?.busy;
+  $("ready-btn").querySelector(".light").className = "light " + (settingUp ? "warn" : ready.level);
+  $("ready-text").textContent = settingUp ? "Setting up" : ready.ready ? (ready.level === "ok" ? "Ready to boot" : "Ready, slower") : `${todo.length} to set up`;
   $("ready-btn").setAttribute("aria-label", `Readiness checklist: ${$("ready-text").textContent}`);
   $("ready-summary").textContent = ready.ready
     ? (ready.level === "ok" ? "Everything is ready. Press Boot." : "Ready to boot. Amber items only make it slower.")

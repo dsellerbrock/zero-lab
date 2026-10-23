@@ -71,9 +71,9 @@ input[type=checkbox], input[type=radio] { accent-color: var(--board); width: 16p
 .brand h1 { font-size: 17px; letter-spacing: .01em; white-space: nowrap; }
 .status { display: flex; align-items: center; gap: var(--s2); margin: 0; min-width: 9em; color: var(--ink-2); }
 .lamp { width: 10px; height: 10px; border-radius: 50%; background: var(--hole); box-shadow: inset 0 0 0 1px rgb(0 0 0 / .2); }
-.status.booting .lamp, .status.stopping .lamp, .status.setup .lamp { background: var(--pad); }
-.status.running .lamp { background: #3cc35f; }
-.status.running { color: var(--ink); }
+.status[data-state=booting] .lamp, .status[data-state=stopping] .lamp, .status[data-state=setup] .lamp { background: var(--pad); }
+.status[data-state=running] .lamp { background: #3cc35f; }
+.status[data-state=running] { color: var(--ink); }
 .summary { display: inline-flex; padding: 0; overflow: hidden; }
 .summary span { padding: var(--s1) var(--s3); display: flex; align-items: center; }
 .summary span + span { border-left: 1px solid var(--line); }
