@@ -2,7 +2,7 @@
 """End-to-end check against a running Zero Lab server (same API the UI uses).
 
   python3 tests/e2e.py --url http://127.0.0.1:8642 [--provision SOURCE] [--image NAME]
-                       [--gpu soft|venus] [--accel auto|tcg|hvf] [--out DIR]
+                       [--gpu soft|venus] [--accel auto|tcg|hvf] [--cpus N] [--out DIR]
 
 Steps: (optional) add+provision an image; boot; wait for the desktop; screenshot; GPIO round trip
 (widget-style drive -> guest program reads it -> guest drives LED pin -> host sees it) with both
@@ -90,6 +90,7 @@ def main():
     ap.add_argument("--image", default="e2e")
     ap.add_argument("--gpu", default="soft")
     ap.add_argument("--accel", default="auto")
+    ap.add_argument("--cpus", type=int, default=4)  # fewer than the host's cores under TCG, or vCPUs spin on each other
     ap.add_argument("--boot-timeout", type=int, default=3600)
     ap.add_argument("--out", type=Path, default=Path("."))
     a = ap.parse_args()
@@ -111,7 +112,7 @@ def main():
         step("provision", e and e["stage"] == "done", seconds=round(time.time() - t0), error=e and e.get("error"))
 
     c.call("/api/config", {"image": a.image, "gpu": a.gpu, "accel": a.accel, "snapshot": False, "network": True,
-                           "display": "app", "ram": 512, "cpus": 4})
+                           "display": "app", "ram": 512, "cpus": a.cpus})
     cfg = c.call("/api/state")["cfg"]
     m = c.mark()
     c.call("/api/boot", {})

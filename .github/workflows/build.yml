@@ -103,7 +103,7 @@ jobs:
         with: { name: macos-dmg, path: dl }
       - name: Install Zero Lab.app from the dmg into a throwaway Applications folder
         run: |
-          df -h /
+          df -h /; sysctl -n hw.ncpu hw.memsize
           hdiutil attach -nobrowse -readonly -mountpoint "$RUNNER_TEMP/dmg" dl/Zero-Lab-*-macOS-arm64.dmg
           mkdir -p "$ZL/Applications"
           ditto "$RUNNER_TEMP/dmg/Zero Lab.app" "$ZL/Applications/Zero Lab.app"
@@ -129,7 +129,7 @@ jobs:
             kill -0 $! 2>/dev/null || { cat "$ZL/tmp/engine.log"; exit 1; }
             sleep 1
           done
-          python3 tests/e2e.py --provision desktop --gpu soft --accel tcg | tee "$ZL/tmp/e2e.log"
+          python3 tests/e2e.py --provision desktop --gpu soft --accel tcg --cpus 2 | tee "$ZL/tmp/e2e.log"  # 3-core runner
       - id: cached
         if: always() && steps.cache.outputs.cache-hit != 'true'
         run: ls "$ZL/home/Library/Application Support/Zero Lab/cache/"*.ok && echo ok=true >> "$GITHUB_OUTPUT"
