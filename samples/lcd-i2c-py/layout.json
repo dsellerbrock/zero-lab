@@ -1,0 +1,13 @@
+{
+ "version": 1,
+ "widgets": [
+  {
+   "type": "lcd",
+   "x": 20,
+   "y": 24,
+   "label": "LCD 16×2",
+   "pins": [],
+   "mode": "i2c"
+  }
+ ]
+}

@@ -1,0 +1,13 @@
+{
+ "version": 1,
+ "widgets": [
+  {
+   "type": "seg7",
+   "x": 20,
+   "y": 24,
+   "label": "7-segment",
+   "pins": [],
+   "mode": "i2c"
+  }
+ ]
+}

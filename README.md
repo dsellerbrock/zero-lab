@@ -22,7 +22,7 @@ Downloads: https://pisim.ellerbrock.dev. Instructions for friends: [docs/FRIENDS
 - **The Pi's screen**, through noVNC over QEMU's VNC websocket.
 - **GPIO breadboard.** A 40-pin header shown by physical position, plus parts you can drag onto it. Layouts save as JSON in `~/Library/Application Support/Zero Lab/layouts` (Linux: `~/.local/share/zero-lab/layouts`).
 - **Files sidebar.** Browse the Pi's file system; drop files in; download files and folders to `~/Downloads`.
-- **Your code.** Drop Python, C/C++ (Makefile/CMake), Rust, Go or an ARM binary. It is built and run inside the Pi, never on your computer. The [samples](samples) cover each GPIO part: button-led (Python and C), switch, knob, analog knob (the emulated MCP3008 ADC on SPI0), 7-segment, probe and LED blink.
+- **Your code.** Drop Python, C/C++ (Makefile/CMake), Rust, Go or an ARM binary. It is built and run inside the Pi, never on your computer. The [samples](samples) cover each GPIO part: button-led (Python and C), switch, knob, analog knob (the emulated MCP3008 ADC on SPI0), 7-segment, 7-segment and LCD 16×2 over I2C (emulated HT16K33 and PCF8574 backpacks), probe and LED blink.
 - **Settings** in a drawer (memory, cores, speed-up, graphics, screen, internet, throw-away mode), each with an explanation.
 
 ## Build from source

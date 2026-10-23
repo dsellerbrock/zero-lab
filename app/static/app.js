@@ -347,6 +347,13 @@ async function adc(channel, value) {
   } finally { adcBusy = false; }
 }
 const bb = breadboard({ canvas: $("canvas"), drive, adc, lev: (p) => pins.lev[p] ?? 0, esc });
+// I2C displays (the fork's HT16K33 and LCD1602 on I2C1): poll their state about 10 times a second while one is on the board.
+let i2cBusy = false, i2cErr = "";
+setInterval(async () => {
+  if (status !== "running" || i2cBusy || !bb.wantsI2c()) return;
+  i2cBusy = true;
+  try { bb.i2c(await api("/api/i2c")); i2cErr = ""; } catch (e) { if (e.message !== i2cErr) toast((i2cErr = e.message)); } finally { i2cBusy = false; }
+}, 100);
 const applyIdle = () => { if (pins.seen) bb.applyIdle(); };
 let addPos = 0;
 document.querySelectorAll("[data-add]").forEach((b) => (b.onclick = () => {

@@ -23,7 +23,7 @@ import vm  # noqa: E402
 
 
 def tiny_dtb():
-    """/ { chosen {}; soc { watchdog@7e100000 {status="okay"}; fb {}; spi@7e204000 {status="disabled"; spidev@0 {}}; mmc@7e202000 {}; mmc@7e300000 {dmas;dma-names}; mmcnr@7e300000 {} } }"""
+    """/ { chosen {}; soc { watchdog@7e100000 {status="okay"}; fb {}; spi@7e204000 {status="disabled"; spidev@0 {}}; i2c@7e804000 {status="disabled"}; mmc@7e202000 {}; mmc@7e300000 {dmas;dma-names}; mmcnr@7e300000 {} } }"""
     strings, body = bytearray(), bytearray()
 
     def s(name):
@@ -48,6 +48,7 @@ def tiny_dtb():
     begin("watchdog@7e100000"); prop("status", b"okay\0"); end()
     begin("fb"); end()
     begin("spi@7e204000"); prop("status", b"disabled\0"); begin("spidev@0"); end(); end()
+    begin("i2c@7e804000"); prop("status", b"disabled\0"); end()
     begin("mmc@7e202000"); prop("status", b"okay\0"); end()
     begin("mmc@7e300000"); prop("dmas", b"\0\0\0\x0b"); prop("dma-names", b"rx-tx\0"); prop("status", b"disabled\0"); end()
     begin("mmcnr@7e300000"); prop("status", b"okay\0"); end()
@@ -76,6 +77,7 @@ class FdtTest(unittest.TestCase):
         self.assertEqual(t.get("/system", "linux,revision"), bytes.fromhex("00902120"))  # gpiozero needs it
         self.assertEqual(t.get("/soc/spi@7e204000", "status"), b"okay\0")  # dtparam=spi=on
         self.assertNotIn("status", t.node("/soc/spi@7e204000/spidev@0").props)  # spidev0.0 stays enabled
+        self.assertEqual(t.get("/soc/i2c@7e804000", "status"), b"okay\0")  # dtparam=i2c_arm=on
         v = fdt.Tree(fdt.qemu_dtb(raw, "soft", "virtio", {}))
         self.assertEqual(v.get("/soc/mmc@7e202000", "status"), b"okay\0")  # SD untouched for virtio root
 
@@ -489,6 +491,33 @@ class ServerTest(unittest.TestCase):
             self.assertEqual(calls, [])
             self.assertEqual(self.req("POST", "/api/adc", token="tok", body={"channel": 3, "value": 1023})[0], 200)
             self.assertEqual(calls, [("qom-set", {"path": "/machine/mcp3008", "property": "ch3", "value": 1023})])
+        finally:
+            del self.app.vm.qmp
+            self.app.vm.status = "stopped"
+
+    def test_i2c(self):
+        calls = []
+
+        def qmp(name, **a):
+            calls.append((name, a))
+            return [{"properties": [{"name": "type", "type": "string", "value": "ht16k33"},
+                                    {"name": "ram", "type": "string", "value": "06" + "00" * 15},
+                                    {"name": "display-on", "type": "uint8", "value": 1}]},
+                    {"properties": [{"name": "text", "type": "string", "value": "41" + "20" * 31},
+                                    {"name": "backlight", "type": "uint8", "value": 1},
+                                    {"name": "parent_bus", "type": "link<bus>", "value": "/x"}]}]
+        self.app.vm.qmp = qmp
+        try:
+            self.assertEqual(self.req("GET", "/api/i2c")[0], 403)  # no token
+            code, body = self.req("GET", "/api/i2c", token="tok")
+            self.assertEqual(code, 400)
+            self.assertIn(b"not running", body)
+            self.app.vm.status = "running"
+            code, body = self.req("GET", "/api/i2c", token="tok")
+            self.assertEqual(code, 200)
+            self.assertEqual(json.loads(body), {"seg7": {"ram": "06" + "00" * 15, "display-on": 1},
+                                                "lcd": {"text": "41" + "20" * 31, "backlight": 1}})
+            self.assertEqual(calls, [("qom-list-get", {"paths": ["/machine/ht16k33", "/machine/lcd1602"]})])
         finally:
             del self.app.vm.qmp
             self.app.vm.status = "stopped"
