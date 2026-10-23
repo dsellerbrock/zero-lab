@@ -1,13 +1,20 @@
-# Builds every Zero Lab download (macOS dmg, Windows setup.exe, Linux AppImage) from this repository alone (inputs pinned in tools/pins.sh).
-# Run it by hand (Actions → Build installers → Run workflow) or push a tag v*. It only produces
-# artifacts; publishing a release stays a person's job (docs/BUILDING.md, "Releasing").
+# Builds every Zero Lab download (macOS dmg, Windows setup.exe, Linux AppImage) from this repository alone
+# (inputs pinned in tools/pins.sh), installs each one the way a friend would and runs the e2e against it.
+# Pull requests get the builds and e2e as checks. On main, when mac/Info.plist has a version with no release
+# yet and every e2e is green, the release job publishes it; the website (pisim.ellerbrock.dev) reads
+# releases/latest of this repository, so it updates by itself. To release: a PR that bumps the version.
 name: Build installers
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
   push:
-    tags: ["v*"]
+    branches: [main]
 permissions:
   contents: read
+concurrency:  # a newer push to the same PR replaces its running build; main runs are never cancelled
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
@@ -281,3 +288,30 @@ jobs:
             D:\zl\tmp\zl-*\*.log
             D:\zl\tmp\zl-*\*.png
             D:\zl\tmp\zl-*\argv.json
+
+  release:  # main only: publish a new version once every installer passed its e2e
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [kernel, macos-e2e, appimage-e2e, windows-e2e]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: |
+          V=$(python3 -c 'import plistlib; print(plistlib.load(open("mac/Info.plist","rb"))["CFBundleShortVersionString"])')
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          if gh release view "v$V" >/dev/null 2>&1; then echo "new=false" >> "$GITHUB_OUTPUT"; echo "v$V is already released"; else echo "new=true" >> "$GITHUB_OUTPUT"; fi
+      - if: steps.v.outputs.new == 'true'
+        uses: actions/download-artifact@v4
+        with: { path: dist, merge-multiple: true }
+      - if: steps.v.outputs.new == 'true'
+        run: |
+          V=${{ steps.v.outputs.version }}
+          ls -la dist
+          gh release create "v$V" --target "$GITHUB_SHA" --title "Zero Lab $V" --notes-file docs/release-notes.md \
+            dist/Zero-Lab-$V-macOS-arm64.dmg dist/Zero-Lab-$V-windows-x64-setup.exe dist/Zero-Lab-$V-linux-x86_64.AppImage \
+            dist/Zero-Lab-$V-kernel-source.tar dist/Zero-Lab-$V-windows-x64-sources.zip dist/Zero-Lab-$V-linux-x86_64-source.tar

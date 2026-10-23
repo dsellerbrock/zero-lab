@@ -2,7 +2,7 @@
 
 Every download is built from this repository alone. Every input comes from a pinned URL and commit (or a release with a sha256) in [`tools/pins.sh`](../tools/pins.sh), so nothing depends on the builder's own folders. You can build three ways:
 
-- **CI.** GitHub → Actions → **Build installers** → *Run workflow*, or push a tag `v*`. Each download appears as an artifact of the run ([`.github/workflows/build.yml`](../.github/workflows/build.yml)).
+- **CI.** Every pull request and every push to `main` runs **Build installers** (or run it by hand: Actions → Build installers → *Run workflow*). Each download appears as an artifact of the run, and a new version is released automatically (see "Releasing") ([`.github/workflows/build.yml`](../.github/workflows/build.yml)).
 - **By hand**, with the per-platform commands below.
 - **One piece at a time.** Each script has steps, e.g. `mac/build-bundle.sh deps|qemu|app|dmg`.
 
@@ -113,15 +113,9 @@ On Linux or Windows, use `--gpu soft --accel tcg`. For the AppImage, start it in
 
 ## Releasing
 
-1. Bump `CFBundleShortVersionString` in `mac/Info.plist`. Bump pins in `tools/pins.sh` if needed.
-2. Push a tag `v<version>`. CI builds every download, installs each one and runs the e2e against it.
-3. A release needs every e2e job green: `macos-e2e`, `appimage-e2e`, `windows-e2e`. These jobs are separate from the builds, so a flaky runner never blocks the artifacts. Rerun only the failed ones with `gh run rerun <run-id> --failed --repo dsellerbrock/zero-lab`; that reuses the build artifacts.
-4. CI only covers TCG + soft graphics. Also run the e2e on a real Mac with the default HVF + Venus (above), because that's the path Mac friends actually take.
-5. Create a **draft** release with the artifacts. A person reviews it and publishes it.
+Releases are automatic. Make a pull request that bumps `CFBundleShortVersionString` in `mac/Info.plist` (and pins in `tools/pins.sh`, if needed); CI builds and tests every installer on the PR. When it's merged, the run on `main` sees a version with no release yet and, once every e2e job is green, the `release` job publishes `v<version>` on this repository with the dmg, setup.exe, AppImage and their source archives. The notes come from [`docs/release-notes.md`](release-notes.md). The website (pisim.ellerbrock.dev) reads this repository's latest release, so its buttons update by themselves.
 
-```bash
-gh release create v<version> --repo dsellerbrock/pisim --draft --title "Zero Lab <version>" <files>
-```
+Merges that don't change the version still build and test everything, but publish nothing. A real Mac should still run the e2e with HVF + Venus now and then (CI can only use TCG + soft).
 
 ## Bumping a pin
 
