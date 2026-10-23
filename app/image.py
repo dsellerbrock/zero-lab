@@ -210,7 +210,6 @@ def prepare(source, imgdir, user, password, qemu_img, progress):
             if shutil.disk_usage(imgdir).free < need:
                 raise ValueError(f"need about {need >> 30} GB free disk space")
         clone(cached_image(entry, cache, progress), base)
-        base.chmod(0o644)  # the clone gets this image's user-data; the cached copy stays clean
     else:
         src = Path(source).expanduser()
         if not src.is_file():
@@ -219,6 +218,7 @@ def prepare(source, imgdir, user, password, qemu_img, progress):
             decompress(src, base, progress)
         else:
             clone(src, base)
+    base.chmod(0o644)  # a clone keeps its source's 0444 (cache, read-only file): the boot partition must be writable
     progress("prepare", 0, 1)
     bootfs_offset(base)  # fail early, in plain words, on a file that is not a Pi OS image
     ssh = imgdir / "ssh"

@@ -188,7 +188,7 @@ def main():
 
     # Knob: a 4-bit value across GPIO5, 6, 13, 19 (lowest bit first)
     run_sample("knob-py")
-    for value in (0, 5, 15, 0):
+    for value in (5, 15, 0, 9):  # each a change: the program prints knob=0 at start, so 0 first would race
         m = c.mark()
         for i, pin in enumerate((5, 6, 13, 19)):
             c.call("/api/gpio", {"pin": pin, "level": (value >> i) & 1})
