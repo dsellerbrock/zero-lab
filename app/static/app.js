@@ -29,6 +29,8 @@ const ACCEL = { hvf: "Apple Hypervisor (fast)", tcg: "Emulated CPU (works everyw
 const ACCEL_SHORT = { hvf: "HVF", tcg: "Emulated CPU" };
 const GPU = { venus: "Venus: Vulkan on your GPU", virgl: "virgl: OpenGL on your GPU", soft: "Software" };
 const GPU_SHORT = { venus: "Venus", virgl: "virgl", soft: "Software graphics" };
+// "/Users/ann/Library/..." -> "~/Library/..." so save locations fit on one line
+const tilde = (p) => (state && p.startsWith(state.paths.home + "/") ? "~" + p.slice(state.paths.home.length) : p);
 const provisioned = () => state.images.filter((i) => i.provisioned);
 const shortLabel = (l) => l.replace(/ \(64-bit.*$/, "");
 const activeImage = () => provisioned().find((i) => i.name === state.cfg.image) || provisioned()[0];
@@ -128,8 +130,8 @@ function renderSettings() {
   fill($("display"), h.displays, c.display, h.displays.map((d) => ({ app: "In Zero Lab", window: "In a separate window" }[d])));
   $("ram").value = String(c.ram); $("cpus").value = String(c.cpus);
   $("network").checked = c.network; $("snapshot").checked = c.snapshot;
-  $("config-path").textContent = state.paths.config;
-  $("layouts-path").textContent = state.paths.layouts;
+  $("config-path").textContent = tilde(state.paths.config);
+  $("layouts-path").textContent = tilde(state.paths.layouts);
 }
 async function saveCfg() {
   state = await api("/api/config", { ram: +$("ram").value, cpus: +$("cpus").value, accel: $("accel").value,
@@ -283,12 +285,12 @@ $("layout-save").onclick = act(async () => {
   const name = $("layout-name").value.trim() || $("layout-list").value || "my-layout";
   const r = await api("/api/layout/save", { name, layout: bb.layout() });
   fill($("layout-list"), r.layouts, name); $("layout-name").value = "";
-  toast(`Saved “${name}” to ${state.paths.layouts}`);
+  toast(`Saved “${name}” to ${tilde(state.paths.layouts)}`);
 });
 $("layout-load").onclick = act(async () => { bb.load(await api(`/api/layout?name=${encodeURIComponent($("layout-list").value)}`)); applyIdle(); });
 $("layout-export").onclick = act(async () => {
   const name = $("layout-list").value; if (!name) throw new Error("Save the layout first, then copy it");
-  toast("Copied to " + (await api("/api/layout/export", { name })).path);
+  toast("Copied to " + tilde((await api("/api/layout/export", { name })).path));
 });
 $("canvas").ondragover = (e) => e.preventDefault();
 $("canvas").ondrop = act(async (e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) { bb.load(JSON.parse(await f.text())); applyIdle(); } });

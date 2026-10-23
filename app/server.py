@@ -109,7 +109,7 @@ class App:
         return out
 
     def paths(self):
-        return {"data": str(self.data), "layouts": str(self.data / "layouts"),
+        return {"home": str(Path.home()), "data": str(self.data), "layouts": str(self.data / "layouts"),
                 "config": str(self.data / "config.json"), "downloads": str(Path.home() / "Downloads")}
 
     def reveal(self, what):
@@ -428,7 +428,7 @@ def make_handler(app, token, port):
                 out.write_bytes(app.layout_path(b["name"]).read_bytes())
                 return {"path": str(out)}
             elif path == "/api/reveal":
-                if b.get("what") not in app.paths():
+                if b.get("what") not in app.paths() or b["what"] == "home":
                     raise ValueError("unknown location")
                 app.reveal(b["what"])
             elif path == "/api/screenshot":
