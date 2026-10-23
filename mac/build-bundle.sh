@@ -77,7 +77,8 @@ qemu() {
       --disable-spice --disable-curses --disable-coreaudio --disable-dbus-display --disable-vmnet \
       --disable-libudev --disable-bzip2 --disable-lzo --disable-snappy --disable-linux-io-uring \
       >/dev/null)
-  make -C "$B/qemu-build" -j$JOBS install >/dev/null
+  # Call ninja directly: macOS make 3.81 passes -j in a form ninja ignores (it would use every core).
+  ninja -C "$B/qemu-build" -j$JOBS install >/dev/null
   echo "qemu ok: $("$B/qemu-install/bin/qemu-system-aarch64" --version | head -1)"
 }
 

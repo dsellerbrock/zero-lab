@@ -33,7 +33,9 @@ def host():
         gpus = ["venus", "soft"] if mac_ver >= 26 or arch != "arm64" else ["soft"]
     else:
         gpus = ["soft"] + (["venus", "virgl"] if os.path.exists("/dev/dri/renderD128") else [])
-    return {"system": system, "arch": arch, "macos": mac_ver, "accels": accels, "gpus": gpus}
+    displays = ["app", "window"] if system == "Darwin" else ["app"]  # Linux build has no SDL/GTK
+    return {"system": system, "arch": arch, "macos": mac_ver, "accels": accels, "gpus": gpus,
+            "displays": displays}
 
 
 def resolve(cfg, h):
@@ -43,6 +45,8 @@ def resolve(cfg, h):
         cfg["accel"] = h["accels"][0]
     if cfg["gpu"] not in h["gpus"]:
         cfg["gpu"] = h["gpus"][0]
+    if cfg["display"] not in h.get("displays", ["app"]):
+        cfg["display"] = "app"
     cfg["ram"] = max(256, min(1024, int(cfg["ram"])))
     cfg["cpus"] = max(1, min(4, int(cfg["cpus"])))
     return cfg

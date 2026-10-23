@@ -32,7 +32,8 @@ function render() {
   $("hostinfo").textContent = `${h.system} ${h.arch}` + (h.accels[0] !== "tcg" ? " · accelerated" : " · emulated CPU (no acceleration on this machine)");
   fill($("accel"), h.accels, c.accel, h.accels.map((a) => ({ hvf: "Apple HVF (fast)", tcg: "TCG (emulated)" }[a] || a)));
   fill($("gpu"), h.gpus, c.gpu, h.gpus.map((g) => ({ venus: "Venus (Vulkan, host GPU)", virgl: "virgl (OpenGL, host GPU)", soft: "Software" }[g])));
-  for (const k of ["ram", "cpus", "display"]) $(k).value = String(c[k]);
+  fill($("display"), h.displays, c.display, h.displays.map((d) => ({ app: "In this window", window: "Separate window" }[d])));
+  for (const k of ["ram", "cpus"]) $(k).value = String(c[k]);
   $("network").checked = c.network; $("snapshot").checked = c.snapshot;
   const imgs = state.images;
   fill($("image"), imgs.map((i) => i.name), c.image || imgs.find((i) => i.provisioned)?.name,

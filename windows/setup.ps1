@@ -2,10 +2,9 @@
 # and adds "Zero Lab" shortcuts to the desktop and Start menu.
 # Started by double-clicking "Install Zero Lab (Windows).cmd".
 #Requires -Version 5.1
+param([string]$Distro = '', [int]$Port = 8642)  # defaults: an existing Ubuntu distro, else a new "Ubuntu"
 $ErrorActionPreference = 'Stop'
 $Here = Split-Path -Parent $MyInvocation.MyCommand.Path
-$Distro = 'Ubuntu'
-$Port = 8642
 $env:WSL_UTF8 = '1'   # make wsl.exe print UTF-8 instead of UTF-16
 function Say($m) { Write-Host "==> $m" -ForegroundColor Magenta }
 function Ask($q) { (Read-Host "$q [Y/n]") -notmatch '^[nN]' }
@@ -20,8 +19,13 @@ if ($LASTEXITCODE -ne 0) {
   exit 0
 }
 
-# 2. The Ubuntu distribution (WSL version 2)
+# 2. The Ubuntu distribution (WSL version 2): reuse one the user already has (Ubuntu, Ubuntu-24.04, ...)
 $distros = (& wsl.exe --list --quiet) -split "`r?`n" | ForEach-Object { $_.Trim([char]0, ' ') } | Where-Object { $_ }
+if (-not $Distro) {
+  $Distro = @($distros | Where-Object { $_ -eq 'Ubuntu' }) + @($distros | Where-Object { $_ -like 'Ubuntu*' }) | Select-Object -First 1
+  if (-not $Distro) { $Distro = 'Ubuntu' }
+}
+Say "Using WSL distribution: $Distro"
 if ($distros -notcontains $Distro) {
   if (-not (Ask "Install Ubuntu in WSL now (about 1 GB)?")) { exit 1 }
   Say 'Ubuntu will ask you to choose a Linux user name and password. When you see a prompt ending in $, type exit and press Enter.'

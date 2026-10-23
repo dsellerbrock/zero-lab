@@ -71,7 +71,7 @@ build() {
      --prefix="$DEST/qemu" --target-list=aarch64-softmmu --enable-slirp --enable-vnc --enable-tools \
      --enable-opengl --enable-virglrenderer --disable-docs --disable-gtk --disable-sdl \
      --disable-guest-agent --disable-capstone >/dev/null)
-  make -C "$WORK/qemu-build" -j"$JOBS" install >/dev/null
+  ninja -C "$WORK/qemu-build" -j"$JOBS" install >/dev/null
   echo "$stamp" > "$DEST/qemu/.built-from"
   rm -rf "$WORK"
   say "QEMU: $("$DEST/qemu/bin/qemu-system-aarch64" --version | head -n1)"
