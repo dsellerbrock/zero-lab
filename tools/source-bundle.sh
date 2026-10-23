@@ -9,7 +9,7 @@ OUT=$(mkdir -p "$1" && cd "$1" && pwd)
 CACHE="$ROOT/build/sources"; mkdir -p "$CACHE"
 QEMU_REPO=${ZL_QEMU_REPO:-$PROJECTS/qemu-gpio-a6}
 [ -d "$QEMU_REPO/.git" ] || [ -n "${ZL_QEMU_REPO:-}" ] || QEMU_REPO=https://github.com/dsellerbrock/qemu-raspi-zero2w.git
-ZL_QEMU_COMMIT=${ZL_QEMU_COMMIT:-617b4d6988722bdc2b1e4f64e94ae8925de503a6}  # qemu-raspi-zero2w 617b4d69 (MCP3008 ADC)
+ZL_QEMU_COMMIT=${ZL_QEMU_COMMIT:-4e2db446fa6c9077ccfe964194aa2f530cb23fa3}  # qemu-raspi-zero2w 4e2db446 (MCP3008 ADC, I2C displays)
 VIRGL_SRC=${ZL_VIRGL_SRC:-$PROJECTS/a6-virgl-stack/sources/virglrenderer}
 EPOXY_SRC=${ZL_EPOXY_SRC:-$PROJECTS/a6-virgl-stack/sources/libepoxy}
 
