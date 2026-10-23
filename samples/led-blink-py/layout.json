@@ -1,0 +1,15 @@
+{
+ "version": 1,
+ "widgets": [
+  {
+   "type": "led",
+   "x": 20,
+   "y": 24,
+   "label": "LED",
+   "pins": [
+    27
+   ],
+   "color": "#3cc35f"
+  }
+ ]
+}

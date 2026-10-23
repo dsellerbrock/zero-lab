@@ -109,22 +109,32 @@ def main():
     shot = c.call("/api/screenshot", {})["path"]
     step("screenshot", Path(shot).exists(), path=shot)
 
-    for sample in ("button-led-py", "button-led-c"):
+    def run_sample(sample):
         d = ROOT / "samples" / sample
         c.call("/api/project/clear", {})
-        for f in sorted(p for p in d.rglob("*") if p.is_file()):
+        for f in sorted(p for p in d.rglob("*") if p.is_file() and "__pycache__" not in p.parts):
             c.call("/api/project/file", raw=f.read_bytes(), headers={"X-Path": f"{sample}/{f.relative_to(d)}"})
         m = c.mark()
         c.call("/api/project/run", {})
         e = c.wait(lambda e: e["type"] == "proc" and ("Ready" in e.get("line", "") or e.get("state") == "exited"), 1800, m)
         step(f"{sample}:started", e and "Ready" in e.get("line", ""), last=e)
+        return c.mark()
+
+    def line(prefix, m, timeout=10):
+        return c.wait(lambda e: e["type"] == "proc" and e.get("line", "").strip() == prefix, timeout, m)
+
+    def gpio_pins(pred, m, timeout):
+        return c.wait(lambda e: e["type"] == "gpio" and pred(e), timeout, m)
+
+    # Button -> LED, in Python and in C (the compiled-language check)
+    for sample in ("button-led-py", "button-led-c"):
+        run_sample(sample)
         lat = []
         for press in (0, 1, 0, 1):  # active-low button: 0 = pressed -> LED (27) on
-            t = time.time()
-            m = c.mark()
+            t, m = time.time(), c.mark()
             c.call("/api/gpio", {"pin": 17, "level": press})
             want = 1 if press == 0 else 0
-            ok = c.wait(lambda e: e["type"] == "gpio" and e["lev"][27] == want and e["fn"][27] == 1, 30, m)
+            ok = gpio_pins(lambda e: e["lev"][27] == want and e["fn"][27] == 1, m, 30)
             lat.append(round(time.time() - t, 3))
             step(f"{sample}:button17={press}->led27={want}", ok, seconds=lat[-1])
         if sample == "button-led-py":
@@ -134,6 +144,64 @@ def main():
             c.call("/api/gpio", {"pin": 17, "level": 1})
         c.call("/api/project/stop", {})
         res[f"{sample}_latency_s"] = lat
+
+    # Switch: the program reports what the widget sets
+    m = run_sample("switch-py")
+    for level in (1, 0, 1):
+        m = c.mark()
+        c.call("/api/gpio", {"pin": 22, "level": level})
+        step(f"switch-py:gpio22={level}", line(f"switch={level}", m))
+    c.call("/api/project/stop", {})
+
+    # Knob: a 4-bit value across GPIO5, 6, 13, 19 (lowest bit first)
+    run_sample("knob-py")
+    for value in (0, 5, 15, 0):
+        m = c.mark()
+        for i, pin in enumerate((5, 6, 13, 19)):
+            c.call("/api/gpio", {"pin": pin, "level": (value >> i) & 1})
+        step(f"knob-py:value={value}", line(f"knob={value}", m))
+    c.call("/api/project/stop", {})
+
+    # 7-segment: the guest's segment pins match the digit it announces
+    segs, digits = (21, 20, 16, 12, 7, 8, 25), ["1111110", "0110000", "1101101", "1111001", "0110011",
+                                                  "1011011", "1011111", "1110000", "1111111", "1111011"]
+    m = run_sample("seven-segment-py")
+    seen = set()
+    end = time.time() + 25
+    while len(seen) < 10 and time.time() < end:
+        e = c.wait(lambda e: e["type"] == "proc" and e.get("line", "").startswith("digit="), 5, m)
+        if not e:
+            break
+        m = c.mark()
+        dgt = int(e["line"].split("=")[1])
+        want = digits[dgt]
+        pattern = lambda g: "".join(str(g["lev"][p]) for p in segs)  # noqa: E731
+        cur = c.pins()  # the guest sets the pins just before it prints the digit
+        ok = (cur and pattern(cur) == want) or gpio_pins(lambda g: pattern(g) == want, m, 0.9)
+        if ok:
+            seen.add(dgt)
+    step("seven-segment-py:digits0-9", len(seen) == 10, digits_seen=sorted(seen))
+    c.call("/api/project/stop", {})
+
+    # Probe: 2 Hz square wave on GPIO24 = 4 edges a second; count for 5 s, expect 20 +/- 20 %
+    run_sample("probe-py")
+    m = c.mark()
+    time.sleep(5)
+    with c.cond:
+        levels = [e["lev"][24] for e in c.events[m:] if e["type"] == "gpio"]
+    edges = sum(1 for a, b in zip(levels, levels[1:]) if a != b)
+    step("probe-py:edges-in-5s", 16 <= edges <= 24, edges=edges)
+    c.call("/api/project/stop", {})
+
+    # LED blink: the guest drives GPIO27 on and off by itself
+    run_sample("led-blink-py")
+    m = c.mark()
+    time.sleep(3.2)
+    with c.cond:
+        levels = [e["lev"][27] for e in c.events[m:] if e["type"] == "gpio"]
+    toggles = sum(1 for a, b in zip(levels, levels[1:]) if a != b)
+    step("led-blink-py:toggles-in-3s", 4 <= toggles <= 8, toggles=toggles)
+    c.call("/api/project/stop", {})
 
     m = c.mark()
     t = time.time()

@@ -1,0 +1,25 @@
+{
+ "version": 1,
+ "widgets": [
+  {
+   "type": "button",
+   "x": 20,
+   "y": 24,
+   "label": "Button",
+   "pins": [
+    17
+   ],
+   "idle": 1
+  },
+  {
+   "type": "led",
+   "x": 196,
+   "y": 24,
+   "label": "LED",
+   "pins": [
+    27
+   ],
+   "color": "#ff3b30"
+  }
+ ]
+}

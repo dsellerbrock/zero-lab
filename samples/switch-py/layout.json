@@ -1,0 +1,15 @@
+{
+ "version": 1,
+ "widgets": [
+  {
+   "type": "switch",
+   "x": 20,
+   "y": 24,
+   "label": "Switch",
+   "pins": [
+    22
+   ],
+   "on": false
+  }
+ ]
+}

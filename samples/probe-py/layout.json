@@ -1,0 +1,14 @@
+{
+ "version": 1,
+ "widgets": [
+  {
+   "type": "probe",
+   "x": 20,
+   "y": 24,
+   "label": "Probe",
+   "pins": [
+    24
+   ]
+  }
+ ]
+}

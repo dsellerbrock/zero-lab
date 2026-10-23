@@ -2,7 +2,7 @@
 const DEFAULTS = {
   button: { label: "Button", pins: [17], idle: 1 }, switch: { label: "Switch", pins: [22], on: false },
   knob: { label: "Knob", pins: [5, 6, 13, 19], value: 0 }, led: { label: "LED", pins: [27], color: "#ff3b30", activeLow: false },
-  seg7: { label: "7-segment", pins: [2, 3, 4, 14, 15, 18, 23], activeLow: false }, probe: { label: "Probe", pins: [27] },
+  seg7: { label: "7-segment", pins: [21, 20, 16, 12, 7, 8, 25], activeLow: false }, probe: { label: "Probe", pins: [27] },
 };
 const SEGS = ["4,2 24,2 20,6 8,6", "26,4 26,24 22,21 22,8", "26,28 26,48 22,44 22,31", "4,50 24,50 20,46 8,46",
   "2,28 2,48 6,44 6,31", "2,4 2,24 6,21 6,8", "4,26 8,23 20,23 24,26 20,29 8,29"];
