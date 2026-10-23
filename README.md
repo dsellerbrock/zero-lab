@@ -14,7 +14,7 @@ Zero Lab runs on **[qemu-raspi-zero2w](https://github.com/dsellerbrock/qemu-rasp
 
 ## Get it
 - **macOS** (Apple Silicon, 26+): `Zero-Lab-<version>-macOS-arm64.dmg`. CPU runs on HVF; graphics are Venus (Vulkan via Metal).
-- **Linux**: `Zero-Lab-<version>-linux-windows.zip`, then `bash setup.sh` (or double-click `Install Zero Lab (Linux).desktop`). It builds the bundled QEMU fork and adds a menu icon.
+- **Linux** (x86_64, Ubuntu 22.04 or newer, or the same age): `Zero-Lab-<version>-linux-x86_64.AppImage`. Mark it executable and double-click it; nothing to compile, no root. The CPU is emulated (TCG); graphics are software, or virgl/Venus where a GPU render node exists. Fallback (other CPUs, older distros): `Zero-Lab-<version>-linux-windows.zip`, then `bash setup.sh`, which builds the QEMU fork from source.
 - **Windows 10/11**: the same zip; double-click `Install Zero Lab (Windows).cmd`. It sets up WSL2 + Ubuntu and runs `setup.sh` there.
 
 Downloads: https://pisim.ellerbrock.dev. Instructions for friends: [docs/FRIENDS.md](docs/FRIENDS.md).
@@ -28,7 +28,7 @@ Downloads: https://pisim.ellerbrock.dev. Instructions for friends: [docs/FRIENDS
 - **Settings** in a drawer (memory, cores, speed-up, graphics, screen, internet, throw-away mode), each with an explanation.
 
 ## Build from source
-Everything builds from this repository; every input is pinned in [`tools/pins.sh`](tools/pins.sh). The full guide is [docs/BUILDING.md](docs/BUILDING.md): the kernel, the macOS dmg, the Linux/WSL zip, GPL sources, testing and releasing. CI builds every download: Actions → **Build installers**.
+Everything builds from this repository; every input is pinned in [`tools/pins.sh`](tools/pins.sh). The full guide is [docs/BUILDING.md](docs/BUILDING.md): the kernel, the macOS dmg, the Linux AppImage, the Linux/WSL zip, GPL sources, testing and releasing. CI builds every download: Actions → **Build installers**.
 
 ```bash
 git clone https://github.com/dsellerbrock/zero-lab.git
@@ -62,7 +62,7 @@ mac/            ZeroLab.swift (window), build-bundle.sh (deps -> qemu -> app -> 
 linux/ windows/ installers
 samples/        one program + layout per GPIO part
 kernel/         build.sh + config for the Pi kernel (Pi OS 6.18.50 with virtio built in)
-tools/          source-bundle.sh (GPL sources), make-linux-windows-bundle.sh, shoot.mjs (screenshots once the page is ready)
+tools/          source-bundle.sh (GPL sources), make-appimage.sh, make-linux-windows-bundle.sh, shoot.mjs (screenshots once the page is ready)
 ```
 
 ## Security model
