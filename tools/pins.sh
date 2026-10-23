@@ -2,9 +2,9 @@
 # A build from a clean git checkout fetches exactly these; nothing comes from the builder's own folders.
 # Bump a pin here, once, and every platform follows.
 
-# The QEMU fork: GPIO events, raspi3ap virtio-mmio, HVF 4 KiB granule, Venus, MCP3008 ADC, I2C displays
+# The QEMU fork: GPIO events, raspi3ap virtio-mmio, HVF 4 KiB granule, Venus, MCP3008 ADC, I2C displays, builds with mingw
 ZL_QEMU_URL=${ZL_QEMU_URL:-https://github.com/dsellerbrock/qemu-raspi-zero2w.git}
-ZL_QEMU_COMMIT=${ZL_QEMU_COMMIT:-4e2db446fa6c9077ccfe964194aa2f530cb23fa3}
+ZL_QEMU_COMMIT=${ZL_QEMU_COMMIT:-bbcc147dffa6460aa7d4fea710011f4889ce2d99}
 
 # virglrenderer with Venus on macOS, and libepoxy with EGL on macOS (UTM's forks)
 ZL_VIRGL_URL=https://github.com/utmapp/virglrenderer.git
