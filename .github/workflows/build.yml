@@ -87,3 +87,123 @@ jobs:
             build/windows/Zero-Lab-*-windows-x64-setup.exe
             build/windows/Zero-Lab-*-windows-x64-sources.zip
           if-no-files-found: error
+
+  # Dead-on-arrival checks: install each download the way a friend would, then run tests/e2e.py against
+  # that installed copy (provision, boot, screenshot, Files, every sample). Separate from the build jobs, so
+  # a flaky runner never blocks the artifacts; a release still needs every e2e job green (docs/BUILDING.md).
+  # Runners have no Apple Hypervisor (no nested virt) and no GPU for Venus: TCG + soft graphics everywhere.
+  macos-e2e:
+    needs: macos
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env: { ZL: "/Users/runner/zl" }  # throwaway HOME + TMPDIR (short: QEMU's unix sockets live in TMPDIR)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: macos-dmg, path: dl }
+      - name: Install Zero Lab.app from the dmg into a throwaway Applications folder
+        run: |
+          df -h /
+          hdiutil attach -nobrowse -readonly -mountpoint "$RUNNER_TEMP/dmg" dl/Zero-Lab-*-macOS-arm64.dmg
+          mkdir -p "$ZL/Applications"
+          ditto "$RUNNER_TEMP/dmg/Zero Lab.app" "$ZL/Applications/Zero Lab.app"
+          hdiutil detach "$RUNNER_TEMP/dmg"
+      - id: img  # the Pi OS download is cached per image URL: 1.4 GB, or a minute of the job
+        run: echo "name=$(python3 -c 'import sys; sys.path[:0] = ["app"]; import image; print(next(e["url"] for e in image.CATALOG if e["id"] == "desktop").rsplit("/", 1)[1])')" >> "$GITHUB_OUTPUT"
+      - id: cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /Users/runner/zl/home/Library/Application Support/Zero Lab/cache
+          key: ${{ runner.os }}-${{ steps.img.outputs.name }}
+      - name: Start the installed engine headless, run the e2e
+        shell: bash  # -o pipefail: tee must not hide the e2e's exit status
+        run: |
+          R="$ZL/Applications/Zero Lab.app/Contents/Resources"
+          D="$ZL/home/Library/Application Support/Zero Lab"
+          mkdir -p "$D" "$ZL/home/Downloads" "$ZL/tmp"
+          echo '{"accel": "tcg", "gpu": "soft"}' > "$D/config.json"
+          HOME="$ZL/home" TMPDIR="$ZL/tmp" ZL_QEMU_DIR="$R/qemu" PYTHONDONTWRITEBYTECODE=1 \
+            "$R/python/bin/python3" -E -s "$R/app/server.py" --port 8642 > "$ZL/tmp/engine.log" 2>&1 &
+          for i in $(seq 60); do
+            curl -sf -o /dev/null http://127.0.0.1:8642/ && break
+            kill -0 $! 2>/dev/null || { cat "$ZL/tmp/engine.log"; exit 1; }
+            sleep 1
+          done
+          python3 tests/e2e.py --provision desktop --gpu soft --accel tcg | tee "$ZL/tmp/e2e.log"
+      - id: cached
+        if: always() && steps.cache.outputs.cache-hit != 'true'
+        run: ls "$ZL/home/Library/Application Support/Zero Lab/cache/"*.ok && echo ok=true >> "$GITHUB_OUTPUT"
+      - if: always() && steps.cached.outputs.ok == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: /Users/runner/zl/home/Library/Application Support/Zero Lab/cache
+          key: ${{ steps.cache.outputs.cache-primary-key }}
+      - if: failure()
+        run: grep '^{' "$ZL/tmp/e2e.log" | tail -1 > "$ZL/tmp/e2e.json"; df -h /
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-e2e-logs
+          path: |
+            /Users/runner/zl/tmp/*.log
+            /Users/runner/zl/tmp/*.json
+            /Users/runner/zl/tmp/zl-*/*.log
+            /Users/runner/zl/tmp/zl-*/*.png
+            /Users/runner/zl/tmp/zl-*/argv.json
+
+  appimage-e2e:
+    needs: appimage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env: { ZL: "/mnt/zl" }  # throwaway HOME + TMPDIR on the runner's big scratch disk (the Pi image takes ~15 GB)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: appimage, path: dl }
+      - name: FUSE (as on any desktop; the AppImage mounts itself) and a scratch folder
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq fuse3
+          sudo mkdir -p "$ZL" && sudo chown "$USER" "$ZL"
+          df -h / /mnt
+          chmod +x dl/Zero-Lab-*-linux-x86_64.AppImage
+      - id: img
+        run: echo "name=$(python3 -c 'import sys; sys.path[:0] = ["app"]; import image; print(next(e["url"] for e in image.CATALOG if e["id"] == "desktop").rsplit("/", 1)[1])')" >> "$GITHUB_OUTPUT"
+      - id: cache
+        uses: actions/cache/restore@v4
+        with:
+          path: /mnt/zl/home/.local/share/zero-lab/cache
+          key: ${{ runner.os }}-${{ steps.img.outputs.name }}
+      - name: Start the AppImage headless, run the e2e
+        shell: bash
+        run: |
+          mkdir -p "$ZL/home/.local/share/zero-lab" "$ZL/home/Downloads" "$ZL/tmp"
+          echo '{"accel": "tcg", "gpu": "soft"}' > "$ZL/home/.local/share/zero-lab/config.json"
+          # No DISPLAY: AppRun skips its terminal and app-menu prompts. BROWSER=true swallows its --open.
+          env -u XDG_DATA_HOME HOME="$ZL/home" TMPDIR="$ZL/tmp" BROWSER=true \
+            dl/Zero-Lab-*-linux-x86_64.AppImage --port 8642 > "$ZL/tmp/engine.log" 2>&1 &
+          for i in $(seq 60); do
+            curl -sf -o /dev/null http://127.0.0.1:8642/ && break
+            kill -0 $! 2>/dev/null || { cat "$ZL/tmp/engine.log"; exit 1; }
+            sleep 1
+          done
+          python3 tests/e2e.py --provision desktop --gpu soft --accel tcg | tee "$ZL/tmp/e2e.log"
+      - id: cached
+        if: always() && steps.cache.outputs.cache-hit != 'true'
+        run: ls "$ZL/home/.local/share/zero-lab/cache/"*.ok && echo ok=true >> "$GITHUB_OUTPUT"
+      - if: always() && steps.cached.outputs.ok == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: /mnt/zl/home/.local/share/zero-lab/cache
+          key: ${{ steps.cache.outputs.cache-primary-key }}
+      - if: failure()
+        run: grep '^{' "$ZL/tmp/e2e.log" | tail -1 > "$ZL/tmp/e2e.json"; df -h / /mnt
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: appimage-e2e-logs
+          path: |
+            /mnt/zl/tmp/*.log
+            /mnt/zl/tmp/*.json
+            /mnt/zl/tmp/zl-*/*.log
+            /mnt/zl/tmp/zl-*/*.png
+            /mnt/zl/tmp/zl-*/argv.json
