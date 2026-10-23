@@ -135,8 +135,15 @@
   <section class="breadboard" aria-labelledby="bb-title">
     <div class="bb-head">
       <h2 id="bb-title">GPIO</h2>
-      <p class="note">The 40-pin header as it sits on the board. Numbers are BCM GPIO numbers.</p>
+      <div class="bb-tools" role="group" aria-label="Breadboard view">
+        <button id="zoom-out" class="btn quiet" type="button" aria-label="Zoom out" title="Zoom out (⌘ or Ctrl + scroll)">−</button>
+        <button id="zoom-reset" class="btn quiet" type="button" aria-label="Zoom: reset to 100%" title="Reset zoom">100%</button>
+        <button id="zoom-in" class="btn quiet" type="button" aria-label="Zoom in" title="Zoom in (⌘ or Ctrl + scroll)">+</button>
+        <button id="popout" class="btn" type="button">Pop out</button>
+      </div>
     </div>
+    <p class="note bb-note">The 40-pin header as it sits on the board. Numbers are BCM GPIO numbers.</p>
+    <p id="popped-note" class="note" hidden>The GPIO panel is in its own window. <button id="popin" class="link" type="button">Bring it back</button></p>
     <div class="header-wrap">
       <ol id="header40" class="header40" aria-label="40-pin header"></ol>
       <ul class="legend" aria-label="What the pin colours mean">
@@ -158,7 +165,7 @@
       <button data-add="lcd" type="button">LCD 16×2</button>
       <button data-add="probe" type="button">Probe</button>
     </div>
-    <div id="canvas" class="canvas" aria-label="Parts on the breadboard"></div>
+    <div id="canvas" class="canvas" aria-label="Parts on the breadboard"><div id="board" class="board"></div></div>
     <div class="layouts">
       <div class="row">
         <label class="sr" for="layout-list">Saved layouts</label>

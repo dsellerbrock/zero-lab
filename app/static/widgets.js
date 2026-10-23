@@ -18,7 +18,7 @@ const SAVE_KEYS = ["id", "type", "x", "y", "label", "pins", "idle", "on", "value
 const lcdChar = (c) => (c < 16 ? "▮" : c === 0x5c ? "¥" : c === 0x7e ? "→" : c === 0x7f ? "←" : c >= 0x20 && c < 0x7e ? String.fromCharCode(c)
   : c >= 0xa1 && c <= 0xdf ? String.fromCharCode(0xff61 + c - 0xa1) : c === 0xff ? "█" : " ");
 
-export function breadboard({ canvas, drive, adc, lev, esc }) {
+export function breadboard({ canvas, drive, adc, lev, esc, zoom = () => 1 }) {
   let widgets = [];
   const pinText = (w) => (w.mode === "adc" ? `MCP3008 CH${w.channel}` : w.mode === "i2c" ? `I2C 0x${w.type === "lcd" ? "27" : "70"}`
     : w.pins.length === 1 ? `GPIO${w.pins[0]}` : `GPIO ${w.pins.join(", ")}`);
@@ -56,18 +56,23 @@ export function breadboard({ canvas, drive, adc, lev, esc }) {
       b.onclick = () => { w.on = !w.on; show(); drive(w.pins[0], w.on ? 1 : 0); };
       w.applyIdle = () => drive(w.pins[0], w.on ? 1 : 0); show();
     } else if (w.type === "knob") {
-      body.innerHTML = `<div class="knob" tabindex="0" role="slider" aria-label="" aria-valuemin="0"><div></div></div>`;
-      const k = body.firstChild, max = () => (w.mode === "adc" ? ADC_MAX : (1 << w.pins.length) - 1);
+      body.innerHTML = `<div class="knob" tabindex="0" role="slider" aria-label="" aria-valuemin="0"><div></div></div>
+        <input class="kval" type="number" min="0" step="1" inputmode="numeric" aria-label="Knob value">`;
+      const k = body.firstChild, num = body.querySelector(".kval"), max = () => (w.mode === "adc" ? ADC_MAX : (1 << w.pins.length) - 1);
       const send = () => (w.mode === "adc" ? adc(w.channel, w.value) : w.pins.forEach((p, i) => drive(p, (w.value >> i) & 1)));
-      const show = () => { k.style.setProperty("--a", `${(360 * w.value) / max()}deg`); k.firstChild.textContent = w.value;
-        k.setAttribute("aria-valuenow", w.value); k.setAttribute("aria-valuemax", max()); };
-      const set = (v) => { v = Math.max(0, Math.min(max(), v)); if (v === w.value) return; w.value = v; show(); send(); };
-      // Drag up/down: 6 px per step for pins; the full analog range takes 256 px.
-      const perPx = () => (w.mode === "adc" ? ADC_MAX / 256 : 1 / 6), key = () => (w.mode === "adc" ? 16 : 1);
-      k.onpointerdown = (e) => { k.setPointerCapture(e.pointerId); const y0 = e.clientY, v0 = w.value;
-        k.onpointermove = (m) => set(v0 + Math.round((y0 - m.clientY) * perPx())); };
+      const show = () => { k.style.setProperty("--a", `${(270 * w.value) / max()}deg`);
+        if (document.activeElement !== num) num.value = w.value;
+        num.max = max(); k.setAttribute("aria-valuenow", w.value); k.setAttribute("aria-valuemax", max()); };
+      const set = (v) => { v = Math.max(0, Math.min(max(), Math.round(v))); if (v === w.value) return; w.value = v; show(); send(); };
+      // Like a real pot: one fixed sweep (SWEEP px of drag) covers the whole range, whatever the resolution; Shift = 10x finer.
+      const SWEEP = 200;
+      k.onpointerdown = (e) => { k.setPointerCapture(e.pointerId); let y = e.clientY, v = w.value;
+        k.onpointermove = (m) => { v += ((y - m.clientY) / SWEEP) * max() * (m.shiftKey ? 0.1 : 1); y = m.clientY; set(v); }; };
       k.onpointerup = () => (k.onpointermove = null);
-      k.onkeydown = (e) => { if (e.key === "ArrowUp" || e.key === "ArrowRight") set(w.value + key()); if (e.key === "ArrowDown" || e.key === "ArrowLeft") set(w.value - key()); };
+      const key = (e) => (e.shiftKey ? 1 : Math.max(1, Math.round(max() / 64)));
+      k.onkeydown = (e) => { if (e.key === "ArrowUp" || e.key === "ArrowRight") set(w.value + key(e)); if (e.key === "ArrowDown" || e.key === "ArrowLeft") set(w.value - key(e)); };
+      k.onwheel = (e) => { if (e.ctrlKey || e.metaKey) return; e.preventDefault(); set(w.value + Math.sign(-e.deltaY) * key(e)); };
+      num.onchange = () => { set(+num.value); num.value = w.value; };
       w.applyIdle = send; show();
       w.redraw = () => { w.value = Math.min(w.value, max()); show(); };
     } else if (w.type === "slider") {
@@ -190,8 +195,11 @@ export function breadboard({ canvas, drive, adc, lev, esc }) {
     const bar = el.querySelector(".t");
     bar.onpointerdown = (e) => {
       if (e.target.tagName === "BUTTON") return;
-      bar.setPointerCapture(e.pointerId); const dx = e.clientX - w.x, dy = e.clientY - w.y;
-      bar.onpointermove = (m) => { w.x = Math.max(0, m.clientX - dx); w.y = Math.max(0, m.clientY - dy); el.style.left = w.x + "px"; el.style.top = w.y + "px"; };
+      bar.setPointerCapture(e.pointerId); const x0 = w.x, y0 = w.y, z = zoom();  // board px = screen px / zoom
+      bar.onpointermove = (m) => {
+        w.x = Math.max(0, Math.round(x0 + (m.clientX - e.clientX) / z)); w.y = Math.max(0, Math.round(y0 + (m.clientY - e.clientY) / z));
+        el.style.left = w.x + "px"; el.style.top = w.y + "px";
+      };
     };
     bar.onpointerup = () => (bar.onpointermove = null);
 

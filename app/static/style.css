@@ -149,7 +149,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--board); width: 16p
 
 /* ---------- breadboard ---------- */
 .breadboard { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-m); padding: var(--s3) var(--s4);
-              display: grid; grid-template-rows: auto auto auto 1fr auto; gap: var(--s3); min-height: 0; overflow: auto; }
+              display: grid; grid-template-rows: auto auto auto auto 1fr auto; gap: var(--s3); min-height: 0; overflow: auto; }
 .bb-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s3); }
 .bb-head h2 { font-size: 16px; }
 /* 2x20 header as it sits on the board: labels above/below, pads in two rows, pin 1 square */
@@ -171,9 +171,22 @@ input[type=checkbox], input[type=radio] { accent-color: var(--board); width: 16p
 .parts { display: flex; flex-wrap: wrap; gap: var(--s2); }
 .parts button { min-height: 28px; padding: 2px var(--s3); }
 .canvas { position: relative; min-height: 180px; border-radius: var(--r-s); overflow: auto; background-color: var(--plastic);
-  background-image: radial-gradient(circle, var(--hole) 1.6px, transparent 2px); background-size: 14px 14px;
+  background-image: radial-gradient(circle, var(--hole) 1.6px, transparent 2px);
+  background-size: calc(14px * var(--zoom, 1)) calc(14px * var(--zoom, 1));
   border: 1px solid var(--line);
   box-shadow: inset 0 3px 0 -1px rgb(196 45 37 / .45), inset 0 -3px 0 -1px rgb(46 111 208 / .45); }
+.board { position: relative; zoom: var(--zoom, 1); }  /* parts scale; drags divide by the zoom */
+.bb-tools { display: flex; align-items: center; gap: var(--s1); }
+.bb-tools .btn { min-height: 28px; padding: 2px var(--s2); }
+#zoom-reset { min-width: 4.4em; font-variant-numeric: tabular-nums; }
+/* GPIO popped out: this window keeps a note, the screen gets the room */
+body.gpio-out .breadboard > :not(.bb-head):not(#popped-note), body.gpio-out .bb-tools, body.gpio-out .splitter { display: none; }
+body.gpio-out .bench { grid-template-columns: auto minmax(0, 1fr) 220px; }  /* the hidden divider leaves the grid */
+/* the pop-out window itself: only the GPIO panel, filling the window */
+body.gpio-only { height: 100vh; overflow: hidden; display: grid; grid-template-rows: 1fr; }
+body.gpio-only .topbar, body.gpio-only #files, body.gpio-only .monitor, body.gpio-only .splitter, body.gpio-only .bb-note { display: none; }
+body.gpio-only .bench { grid-template-columns: minmax(0, 1fr); min-height: 0; overflow: hidden; padding: var(--s2); }
+body.gpio-only .breadboard { grid-template-rows: auto auto auto 1fr auto; }
 .layouts { display: grid; gap: var(--s2); }
 .layouts select { min-width: 9em; }
 .samples select { flex: 1; min-width: 0; }
@@ -193,9 +206,13 @@ input[type=checkbox], input[type=radio] { accent-color: var(--board); width: 16p
 .toggle.on { background: var(--board); } .toggle.on::after { left: 25px; }
 .led { width: 22px; height: 22px; border-radius: 50%; background: #4a3a3a; border: 2px solid #2a2222; }
 .led.on { background: currentColor; box-shadow: 0 0 12px 3px currentColor; }
-.knob { width: 50px; height: 50px; border-radius: 50%; background: conic-gradient(var(--board) var(--a), var(--hole) 0);
-        display: grid; place-items: center; cursor: ns-resize; }
-.knob div { width: 36px; height: 36px; border-radius: 50%; background: var(--paper); display: grid; place-items: center; font: 13px var(--mono); }
+/* a pot: a 270° track from 7:30 to 4:30 o'clock, and a pointer on the cap */
+.knob { width: 50px; height: 50px; border-radius: 50%; display: grid; place-items: center; cursor: ns-resize; touch-action: none;
+        background: conic-gradient(from -135deg, var(--board) var(--a), var(--hole) 0 270deg, transparent 0); }
+.knob div { width: 36px; height: 36px; border-radius: 50%; background: var(--paper); position: relative; rotate: calc(var(--a) - 135deg); }
+.knob div::after { content: ""; position: absolute; left: calc(50% - 1.5px); top: 4px; width: 3px; height: 11px; border-radius: 2px; background: var(--ink); }
+.w .b:has(.knob) { flex-direction: column; }
+.kval { width: 6.5em; margin-top: var(--s1); font: 12px var(--mono); text-align: center; }
 .slider { width: 120px; accent-color: var(--board); } .slider + output { display: inline-block; width: 4ch; margin-left: 6px; font: 13px var(--mono); }
 svg.seg7 polygon, .seg4 circle { fill: #3a2a2a; } svg.seg7 polygon.on, .seg4 circle.on { fill: #ff3b30; }
 .seg4 { display: flex; gap: 3px; align-items: end; background: #1c1414; padding: 6px; border-radius: var(--r-s); }

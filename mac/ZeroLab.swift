@@ -3,9 +3,10 @@
 import Cocoa
 import WebKit
 
-final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, NSWindowDelegate {
     var window: NSWindow!
     var web: WKWebView!
+    var popups: [NSWindow] = []  // the GPIO panel popped out (window.open)
     let server = Process()
     let toServer = Pipe()
     var quitting = false
@@ -14,11 +15,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         buildMenu()
         web = WKWebView(frame: .zero, configuration: WKWebViewConfiguration())
         web.navigationDelegate = self
+        web.uiDelegate = self
         web.isInspectable = true
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1440, height: 900),
                           styleMask: [.titled, .closable, .miniaturizable, .resizable],
                           backing: .buffered, defer: false)
         window.title = "Zero Lab"
+        window.delegate = self
         window.contentView = web
         window.setFrameAutosaveName("ZeroLabMain")
         window.center()
@@ -91,6 +94,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         } else {
             decisionHandler(.allow)
         }
+    }
+
+    // window.open from the page (the GPIO pop-out): a second window sharing this web process, so the two
+    // pages can talk (BroadcastChannel). Anything not local opens in the user's browser instead.
+    func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
+                 for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
+        guard let url = action.request.url, url.host == "127.0.0.1" || url.host == "localhost" else {
+            if let url = action.request.url { NSWorkspace.shared.open(url) }
+            return nil
+        }
+        let pop = WKWebView(frame: .zero, configuration: configuration)
+        pop.uiDelegate = self
+        pop.navigationDelegate = self
+        pop.isInspectable = true
+        let w = CGFloat(truncating: windowFeatures.width ?? 560), h = CGFloat(truncating: windowFeatures.height ?? 860)
+        let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: w, height: h),
+                           styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+        win.title = "Zero Lab GPIO"
+        win.isReleasedWhenClosed = false
+        win.delegate = self
+        win.contentView = pop
+        win.setFrameAutosaveName("ZeroLabGPIO")
+        win.makeKeyAndOrderFront(nil)
+        popups.append(win)
+        return pop
+    }
+
+    // window.close() from the page
+    func webViewDidClose(_ webView: WKWebView) { webView.window?.close() }
+
+    func windowWillClose(_ note: Notification) {
+        guard let win = note.object as? NSWindow else { return }
+        if win === window { NSApp.terminate(nil); return }  // the main window: quit (stops the Pi cleanly)
+        // A pop-out closed with its close button: unload the page so it hands its layout back (pagehide).
+        (win.contentView as? WKWebView)?.loadHTMLString("", baseURL: nil)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.popups.removeAll { $0 === win } }
     }
 
     func buildMenu() {

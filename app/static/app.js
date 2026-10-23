@@ -5,6 +5,8 @@ import { filesPanel } from "./files.js";
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const T = window.ZL_TOKEN;
+const GPIO_ONLY = new URLSearchParams(location.search).get("view") === "gpio";  // the popped-out GPIO window
+if (GPIO_ONLY) { document.body.classList.add("gpio-only"); document.title = "Zero Lab GPIO"; }
 let state = null, ready = null, status = "stopped", wsPort = null, rfb = null, setupOpen = false, screenUp = false;
 let pins = { fn: Array(28).fill(0), lev: Array(28).fill(0), seen: false };
 
@@ -170,7 +172,7 @@ document.querySelectorAll("[data-reveal]").forEach((b) => (b.onclick = act(() =>
 $("boot").onclick = act(async () => { setupOpen = false; await api("/api/boot", {}); });
 $("stop").onclick = act(() => api("/api/stop", {}));
 function connectScreen() {
-  if (rfb || !wsPort || state.cfg.display !== "app") return;
+  if (rfb || !wsPort || state.cfg.display !== "app" || GPIO_ONLY) return;
   rfb = new RFB($("screen"), `ws://${location.host}/vnc?t=${encodeURIComponent(T)}`);
   rfb.scaleViewport = true; rfb.focusOnClick = true;
   rfb.addEventListener("connect", () => { screenUp = true; $("screen-msg").hidden = true; });
@@ -346,7 +348,7 @@ async function adc(channel, value) {
     }
   } finally { adcBusy = false; }
 }
-const bb = breadboard({ canvas: $("canvas"), drive, adc, lev: (p) => pins.lev[p] ?? 0, esc });
+const bb = breadboard({ canvas: $("board"), zoom: () => zoom, drive, adc, lev: (p) => pins.lev[p] ?? 0, esc });
 // I2C displays (the fork's HT16K33 and LCD1602 on I2C1): poll their state about 10 times a second while one is on the board.
 let i2cBusy = false, i2cErr = "";
 setInterval(async () => {
@@ -357,7 +359,8 @@ setInterval(async () => {
 const applyIdle = () => { if (pins.seen) bb.applyIdle(); };
 let addPos = 0;
 document.querySelectorAll("[data-add]").forEach((b) => (b.onclick = () => {
-  addPos = (addPos + 1) % 6; const w = bb.make({ type: b.dataset.add, x: 16 + addPos * 22, y: 16 + addPos * 26 });
+  addPos = (addPos + 1) % 6; const c = $("canvas");  // land in view, whatever the zoom and scroll
+  const w = bb.make({ type: b.dataset.add, x: Math.round(c.scrollLeft / zoom) + 16 + addPos * 22, y: Math.round(c.scrollTop / zoom) + 16 + addPos * 26 });
   if (pins.seen) w.applyIdle?.();
 }));
 $("layout-save").onclick = act(async () => {
@@ -377,6 +380,55 @@ bb.load({ version: 1, widgets: [ // matches samples/button-led-*
   { type: "button", x: 20, y: 24, label: "Button", pins: [17], idle: 1 },
   { type: "led", x: 196, y: 24, label: "LED", pins: [27], color: "#ff3b30" },
 ] });
+
+// ---------- breadboard zoom (buttons, or ⌘/Ctrl + scroll; trackpad pinch arrives the same way); remembered ----------
+var zoom = 1;
+{
+  const KEY = "zerolab.bbZoom", STEPS = [0.5, 0.67, 0.8, 1, 1.25, 1.5, 2, 2.5];
+  const setZoom = (z) => {
+    zoom = Math.round(Math.max(STEPS[0], Math.min(STEPS.at(-1), z)) * 100) / 100;
+    $("canvas").style.setProperty("--zoom", zoom); $("zoom-reset").textContent = Math.round(zoom * 100) + "%";
+    try { localStorage.setItem(KEY, zoom); } catch { /* not remembered */ }
+  };
+  try { setZoom(+localStorage.getItem(KEY) || 1); } catch { setZoom(1); }
+  $("zoom-in").onclick = () => setZoom(STEPS.find((s) => s > zoom + 0.01) ?? STEPS.at(-1));
+  $("zoom-out").onclick = () => setZoom([...STEPS].reverse().find((s) => s < zoom - 0.01) ?? STEPS[0]);
+  $("zoom-reset").onclick = () => setZoom(1);
+  $("canvas").addEventListener("wheel", (e) => { if (e.ctrlKey || e.metaKey) { e.preventDefault(); setZoom(zoom * Math.exp(-e.deltaY / 200)); } }, { passive: false });
+}
+
+// ---------- pop the GPIO panel out into its own window; the layout travels with it ----------
+{
+  const ch = "BroadcastChannel" in window ? new BroadcastChannel("zerolab-gpio") : null;
+  const setOut = (on) => { document.body.classList.toggle("gpio-out", on); $("popped-note").hidden = !on; };
+  if (GPIO_ONLY) {
+    $("popout").textContent = "Put back";
+    $("popout").onclick = () => window.close();
+    let got = false;
+    if (ch) ch.onmessage = ({ data }) => {
+      if (data.type === "layout" && !got) { got = true; bb.load(data.layout); applyIdle(); }
+      if (data.type === "close") window.close();
+      if (data.type === "who") ch.postMessage({ type: "here" });
+    };
+    ch?.postMessage({ type: "hello" });
+    addEventListener("pagehide", () => ch?.postMessage({ type: "bye", layout: bb.layout() }));
+  } else {
+    let win = null;
+    $("popout").onclick = () => {
+      win = window.open("/?view=gpio", "zerolab-gpio", "popup,width=560,height=860");
+      if (!win) return toast("The pop-out window was blocked. Allow pop-ups for Zero Lab and try again.");
+      const watch = setInterval(() => { if (win.closed) { clearInterval(watch); setTimeout(() => setOut(false), 500); } }, 1000);
+      if (!ch) toast("This browser can't share the layout with the new window; it starts with the default parts.");
+    };
+    $("popin").onclick = () => { win && !win.closed ? win.close() : ch?.postMessage({ type: "close" }); setOut(false); };
+    if (ch) ch.onmessage = ({ data }) => {
+      if (data.type === "hello") { ch.postMessage({ type: "layout", layout: bb.layout() }); setOut(true); }
+      if (data.type === "here") setOut(true);
+      if (data.type === "bye") { bb.load(data.layout); applyIdle(); setOut(false); }
+    };
+    ch?.postMessage({ type: "who" });  // reloaded while a GPIO window is open: stay popped out
+  }
+}
 
 // ---------- resizable GPIO panel (drag the divider; arrow keys too); remembered per browser ----------
 {

@@ -34,6 +34,8 @@ This is the fast version: the Pi's CPU runs on your Mac's own cores (Apple Hyper
 - Inputs drive the Pi's pins, and the Pi's outputs light LEDs. The strip at the top shows every pin: blue = input, orange = output.
 - A Button is "active low" by default (it rests at 1 and pressing it gives 0), just like a real button wired with a pull-up. This matches `gpiozero.Button(17)`.
 - A Knob drives several pins as a binary number (the first pin is the lowest bit), or, set to **Analog (MCP3008 channel N)** in ⚙, a 0–1023 value on the Pi's emulated MCP3008 ADC (SPI0, CE0). A **Slider** does the same. Read it as on a real Pi: `from gpiozero import MCP3008; MCP3008(channel=0).value` (try `samples/adc-knob-py`).
+- Turn a Knob by dragging up or down (one drag covers the whole range; hold Shift for fine steps), with the scroll wheel, the arrow keys, or by typing a value in the box under it.
+- Zoom the breadboard with **−** / **+** (or ⌘/Ctrl + scroll). **Pop out** moves the GPIO panel into its own window, so the Pi's screen gets the whole main window; **Put back** returns it.
 - A 7-segment's ⚙ **Connection** is either GPIO pins (one digit) or **I2C HT16K33** (a 4-digit backpack at 0x70, with dots and a colon). The **LCD 16×2** is an I2C LCD (PCF8574 backpack at 0x27). Both are on the Pi's `/dev/i2c-1`; write to them with smbus2 (try `samples/seg7-i2c-py` and `samples/lcd-i2c-py`).
 - SPI0 and I2C1 are always on, as with `dtparam=spi=on` and `dtparam=i2c_arm=on`, so GPIO 7–11 and 2/3 belong to them.
 - Save layouts by name, export them to your Downloads folder, or drop a `.json` layout onto the canvas.
@@ -44,7 +46,7 @@ Drop a file, folder or `.zip` on **Your code**, then click **Build & run**. Outp
 - To choose the commands yourself, add a `pi-run.json`: `{"build": "make", "run": "./blink"}`.
 - Code is built and run **inside the virtual Pi only**, never on your computer.
 - **Start on boot** runs the project automatically each time the Pi boots.
-- Try `samples/button-led-py` (Python) or `samples/button-led-c` (C). Press the Button widget and the LED widget lights.
+- Or pick a ready-made example under **Samples** and press **Load**: its code is staged and its parts appear on the breadboard. Then **Build & run**. With `button-led-py`, press the Button widget and the LED widget lights.
 
 ## Licences
 Zero Lab is free software under the GNU GPL v2 or later. It includes QEMU (GPL-2.0), a Linux kernel for the Pi (GPL-2.0; its source is the `kernel-source` download next to the app) and other components listed in `THIRD-PARTY.md`. The complete source code is in the **Source code (GPL)** folder (on the Mac disk image) or the `sources` folder (in the zip), and online at https://github.com/dsellerbrock/zero-lab and https://github.com/dsellerbrock/qemu-raspi-zero2w. Raspberry Pi OS is downloaded from raspberrypi.com under its own licences and is not included. Raspberry Pi is a trademark of Raspberry Pi Ltd. Zero Lab is not affiliated with them.
