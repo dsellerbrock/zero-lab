@@ -30,21 +30,23 @@ check() {
 }
 
 install_packages() {
-  local sudo=""; [ "$(id -u)" = 0 ] || sudo=sudo
+  local sudo=""; [ "$(id -u)" = 0 ] || { sudo=sudo; sudo -v || die "Zero Lab needs your password to install build tools"; }
+  mkdir -p "$WORK"
   if command -v apt-get >/dev/null; then
     say "Installing build tools with apt (you may be asked for your password)"
-    $sudo apt-get update -qq
-    $sudo apt-get install -y -qq build-essential ninja-build meson pkg-config python3 python3-venv \
-      libglib2.0-dev libpixman-1-dev libslirp-dev libepoxy-dev libdrm-dev libgbm-dev libvulkan-dev \
-      libfdt-dev flex bison mtools xz-utils openssh-client curl >/dev/null
+    logged $sudo apt-get update
+    # noninteractive: a package asking a question (tzdata, keyboard) would otherwise stall a hidden prompt
+    logged $sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential ninja-build meson \
+      pkg-config python3 python3-venv libglib2.0-dev libpixman-1-dev libslirp-dev libepoxy-dev libdrm-dev \
+      libgbm-dev libvulkan-dev libfdt-dev flex bison mtools xz-utils openssh-client curl
   elif command -v dnf >/dev/null; then
     say "Installing build tools with dnf (you may be asked for your password)"
-    $sudo dnf install -y -q gcc gcc-c++ make ninja-build meson pkgconf-pkg-config python3 glib2-devel \
+    logged $sudo dnf install -y gcc gcc-c++ make ninja-build meson pkgconf-pkg-config python3 glib2-devel \
       pixman-devel libslirp-devel libepoxy-devel libdrm-devel mesa-libgbm-devel vulkan-loader-devel \
       libfdt-devel flex bison mtools xz openssh-clients curl
   elif command -v pacman >/dev/null; then
     say "Installing build tools with pacman (you may be asked for your password)"
-    $sudo pacman -S --needed --noconfirm base-devel ninja meson pkgconf python glib2 pixman libslirp \
+    logged $sudo pacman -S --needed --noconfirm base-devel ninja meson pkgconf python glib2 pixman libslirp \
       libepoxy libdrm mesa vulkan-icd-loader vulkan-headers dtc flex bison mtools xz openssh curl
   else
     die "unsupported distribution: install QEMU build dependencies, mtools and ssh, then rerun"
