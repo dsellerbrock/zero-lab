@@ -1,43 +1,86 @@
 # Zero Lab
 
-A friendly app around an emulated **Raspberry Pi Zero 2 W** (QEMU fork with GPIO edge events). It has VM settings, Boot/Stop, the Pi's screen, a GPIO sandbox (buttons, switches, knobs, LEDs, 7-segment displays, a logic probe), and drop-in code that is built and run inside the Pi.
+A friendly app around an emulated **Raspberry Pi Zero 2 W**. Boot Raspberry Pi OS, use its desktop, wire virtual buttons, switches, knobs, LEDs and 7-segment displays to its GPIO pins, move files in and out, and drop in your own code to build and run on the Pi.
 
-- **macOS (Apple Silicon, 26+):** `Zero Lab.app` in a `.dmg`. HVF CPU acceleration plus Venus (Vulkan → Metal) GPU.
-- **Linux:** `setup.sh` builds the bundled QEMU fork and installs a menu/desktop launcher.
-- **Windows:** `setup.ps1` (started from `Install Zero Lab (Windows).cmd`) sets up WSL2 + Ubuntu and runs `setup.sh` there.
+Zero Lab runs on **[qemu-raspi-zero2w](https://github.com/dsellerbrock/qemu-raspi-zero2w)**, our QEMU fork with:
+- external GPIO with edge interrupts for the BCM2835;
+- virtio-gpu and virtio-blk on the `raspi3ap` board;
+- Apple Hypervisor (HVF) support, using a 4 KiB IPA granule;
+- Venus (Vulkan) graphics through MoltenVK/Metal.
 
-Friends' instructions: [docs/FRIENDS.md](docs/FRIENDS.md). Design: `raspi-zero2w/docs/pi-emulator-app-design.md`.
+<!-- screenshots -->
+
+## Get it
+- **macOS** (Apple Silicon, 26+): `Zero-Lab-<version>-macOS-arm64.dmg`. CPU runs on HVF; graphics are Venus (Vulkan via Metal).
+- **Linux**: `Zero-Lab-<version>-linux-windows.zip`, then `bash setup.sh` (or double-click `Install Zero Lab (Linux).desktop`). It builds the bundled QEMU fork and adds a menu icon.
+- **Windows 10/11**: the same zip; double-click `Install Zero Lab (Windows).cmd`. It sets up WSL2 + Ubuntu and runs `setup.sh` there.
+
+Downloads: https://pisim.ellerbrock.dev. Instructions for friends: [docs/FRIENDS.md](docs/FRIENDS.md).
+
+## What's in the window
+- **First run.** A checklist shows what the Pi needs (emulator, speed-up, graphics, Raspberry Pi OS, user, disk space), and three steps download and set up the official image. You never download a kernel or firmware; they come from the image.
+- **The Pi's screen**, through noVNC over QEMU's VNC websocket.
+- **GPIO breadboard.** A 40-pin header shown by physical position, plus parts you can drag onto it. Layouts save as JSON in `~/Library/Application Support/Zero Lab/layouts` (Linux: `~/.local/share/zero-lab/layouts`).
+- **Files sidebar.** Browse the Pi's file system; drop files in; download files and folders to `~/Downloads`.
+- **Your code.** Drop Python, C/C++ (Makefile/CMake), Rust, Go or an ARM binary. It is built and run inside the Pi, never on your computer. The [samples](samples) cover each GPIO part: button-led (Python and C), switch, knob, 7-segment, probe and LED blink.
+- **Settings** in a drawer (memory, cores, speed-up, graphics, screen, internet, throw-away mode), each with an explanation.
+
+## Build from source
+You need macOS 26+ on Apple Silicon with Xcode command-line tools and Homebrew (`meson ninja pkg-config glib pixman libslirp`), or Linux.
+
+```bash
+git clone https://github.com/dsellerbrock/zero-lab.git
+```
+
+```bash
+cd zero-lab
+```
+
+**macOS app and dmg.** The QEMU fork is fetched from GitHub at the pinned commit. virglrenderer and libepoxy sources come from `ZL_VIRGL_SRC` and `ZL_EPOXY_SRC`; MoltenVK comes from `ZL_MOLTENVK`.
+
+```bash
+mac/build-bundle.sh all
+```
+
+**Linux and Windows zip** (includes all sources):
+
+```bash
+tools/make-linux-windows-bundle.sh
+```
+
+**Run from a checkout** against any build of the fork:
+
+```bash
+ZL_QEMU_DIR=/path/to/qemu/prefix python3 app/server.py --open
+```
+
+**Tests:**
+
+```bash
+python3 -m unittest discover -s tests
+```
+
+`tests/e2e.py` drives a real boot through the same API the UI uses: image setup, boot, Files, and every GPIO sample.
 
 ## Layout
 ```
 app/            server.py (stdlib HTTP + SSE + VNC websocket pipe), vm.py (QEMU args, QMP, serial),
                 gpio.py (QTest, GPIO registers only), image.py (download, verify, provision), fdt.py (DTB editor),
-                guest.py (SSH push/run), guest/ (scripts that run inside the Pi), static/ (UI + vendored noVNC)
-mac/            ZeroLab.swift (window), build-bundle.sh (deps → qemu → app → dmg), relocate.py
+                guest.py (SSH: code + files), readiness.py, guest/ (scripts that run inside the Pi),
+                static/ (UI, vendored noVNC and B612 fonts)
+mac/            ZeroLab.swift (window), build-bundle.sh (deps -> qemu -> app -> dmg), relocate.py
 linux/ windows/ installers
-samples/        button-led-py, button-led-c
-tools/          source-bundle.sh (GPL sources), make-linux-windows-bundle.sh
-tests/          python3 -m unittest discover -s tests
-```
-
-## Run from a checkout
-```bash
-ZL_QEMU_DIR=/path/to/qemu/prefix python3 app/server.py --open
-```
-
-## Build the releases
-```bash
-ZL_QEMU_COMMIT=<fork commit> mac/build-bundle.sh all
-```
-
-```bash
-ZL_QEMU_COMMIT=<fork commit> tools/make-linux-windows-bundle.sh
+samples/        one program + layout per GPIO part
+tools/          source-bundle.sh (GPL sources), make-linux-windows-bundle.sh, shoot.sh (screenshots)
 ```
 
 ## Security model
-- The UI binds `127.0.0.1` only. Every request must carry a `127.0.0.1`/`localhost` Host header. POSTs, the event stream and the VNC socket also need a per-launch token.
-- QTest is restricted to the BCM2835 GPIO registers.
-- Dropped code is only packed into a tar on the host. It is unpacked, built and run inside the guest over SSH, which is forwarded on loopback only.
+- **Local access.** The UI binds `127.0.0.1` only. Every request needs a `127.0.0.1`/`localhost` Host header. POSTs, the event stream and the VNC socket also need a per-launch token.
+- **GPIO.** QTest is restricted to the BCM2835 GPIO registers.
+- **Code and files.** Dropped code and files go to the Pi over SSH, which is forwarded on loopback only. Code runs only inside the Pi. The file browser writes on your computer only into `~/Downloads`, never following symlinks or overwriting.
 
-## Licence
-GPL-2.0-or-later. Third-party components: [THIRD-PARTY.md](THIRD-PARTY.md).
+## Licence and source
+Zero Lab is GPL-2.0-or-later.
+- **Source.** This repo and [qemu-raspi-zero2w](https://github.com/dsellerbrock/qemu-raspi-zero2w). Every release also carries the exact sources it was built from: the "Source code (GPL)" folder on the dmg and `sources/` in the zip.
+- **Third-party components.** [THIRD-PARTY.md](THIRD-PARTY.md).
+- **Raspberry Pi OS** is downloaded from raspberrypi.com and is not included. "Raspberry Pi" is a trademark of Raspberry Pi Ltd. Zero Lab is not affiliated with Raspberry Pi Ltd.

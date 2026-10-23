@@ -8,16 +8,18 @@ PROJECTS=$(dirname "$ROOT")
 OUT=$(mkdir -p "$1" && cd "$1" && pwd)
 CACHE="$ROOT/build/sources"; mkdir -p "$CACHE"
 QEMU_REPO=${ZL_QEMU_REPO:-$PROJECTS/qemu-gpio-a6}
-: "${ZL_QEMU_COMMIT:?set ZL_QEMU_COMMIT}"
+[ -d "$QEMU_REPO/.git" ] || [ -n "${ZL_QEMU_REPO:-}" ] || QEMU_REPO=https://github.com/dsellerbrock/qemu-raspi-zero2w.git
+ZL_QEMU_COMMIT=${ZL_QEMU_COMMIT:-d4fa079b1e73a95a414b71e3e9e7fdad8d10ac0b}  # qemu-raspi-zero2w d4fa079b
 VIRGL_SRC=${ZL_VIRGL_SRC:-$PROJECTS/a6-virgl-stack/sources/virglrenderer}
 EPOXY_SRC=${ZL_EPOXY_SRC:-$PROJECTS/a6-virgl-stack/sources/libepoxy}
 
-short=$(git -C "$QEMU_REPO" rev-parse --short=12 "$ZL_QEMU_COMMIT")
+short=${ZL_QEMU_COMMIT:0:12}
 q="$CACHE/qemu-zero-lab-$short.tar.xz"
 if [ ! -f "$q" ]; then
   # QEMU's own script: the tree at the commit plus the meson subprojects it builds with.
   tmp=$(mktemp -d); git clone -q --no-checkout "$QEMU_REPO" "$tmp/qemu"
   git -C "$tmp/qemu" checkout -q "$ZL_QEMU_COMMIT"
+  full=$(git -C "$tmp/qemu" rev-parse HEAD)
   touch "$tmp/qemu.tar"  # the script realpath()s its output first; BSD realpath needs it to exist
   (cd "$tmp/qemu" && scripts/archive-source.sh "$tmp/qemu.tar")
   # archive-source.sh writes paths without a top-level directory; add one, as release tarballs have
@@ -44,7 +46,8 @@ cp "$ROOT/LICENSE" "$ROOT/THIRD-PARTY.md" "$OUT/"
 rm -rf "$OUT/patches" && cp -R "$ROOT/patches" "$OUT/patches"  # applied on top of the QEMU tarball by setup.sh
 cat > "$OUT/README.txt" <<TXT
 Complete corresponding source for Zero Lab binaries.
-QEMU (GPL-2.0): qemu-zero-lab-$short.tar.xz is the fork at commit $(git -C "$QEMU_REPO" rev-parse "$ZL_QEMU_COMMIT"),
+QEMU (GPL-2.0): qemu-zero-lab-$short.tar.xz is the fork at commit $ZL_QEMU_COMMIT
+(https://github.com/dsellerbrock/qemu-raspi-zero2w),
 made with QEMU's scripts/archive-source.sh. Build: see zero-lab/mac/build-bundle.sh (macOS) or linux/setup.sh.
 Licences and versions of everything else: THIRD-PARTY.md.
 TXT

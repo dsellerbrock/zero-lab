@@ -7,7 +7,7 @@
 #   mac/build-bundle.sh dmg       the .dmg (includes the GPL source tarballs)
 #   mac/build-bundle.sh all
 #
-# Inputs (env): ZL_QEMU_REPO (default ../qemu-gpio-a6), ZL_QEMU_COMMIT (required for qemu),
+# Inputs (env): ZL_QEMU_REPO (default ../qemu-gpio-a6, else github.com/dsellerbrock/qemu-raspi-zero2w), ZL_QEMU_COMMIT (full hash; pinned),
 # ZL_VIRGL_SRC / ZL_EPOXY_SRC (default ../a6-virgl-stack/sources/*), Homebrew glib/pixman/libslirp,
 # MoltenVK (ZL_MOLTENVK, default ../a6-virgl-stack/prefix-venus/lib/libMoltenVK.dylib).
 set -euo pipefail
@@ -19,6 +19,8 @@ DEPS="$B/deps"
 export MACOSX_DEPLOYMENT_TARGET=26.0
 JOBS=3
 QEMU_REPO=${ZL_QEMU_REPO:-$PROJECTS/qemu-gpio-a6}
+[ -d "$QEMU_REPO/.git" ] || [ -n "${ZL_QEMU_REPO:-}" ] || QEMU_REPO=https://github.com/dsellerbrock/qemu-raspi-zero2w.git
+ZL_QEMU_COMMIT=${ZL_QEMU_COMMIT:-d4fa079b1e73a95a414b71e3e9e7fdad8d10ac0b}  # qemu-raspi-zero2w d4fa079b
 VIRGL_SRC=${ZL_VIRGL_SRC:-$PROJECTS/a6-virgl-stack/sources/virglrenderer}
 EPOXY_SRC=${ZL_EPOXY_SRC:-$PROJECTS/a6-virgl-stack/sources/libepoxy}
 KHRONOS_INCLUDE=${ZL_KHRONOS_INCLUDE:-$PROJECTS/a6-virgl-stack/prefix/include}  # EGL/GLES/KHR headers (build only)
@@ -61,8 +63,7 @@ deps() {
 }
 
 qemu() {
-  : "${ZL_QEMU_COMMIT:?set ZL_QEMU_COMMIT to the QEMU fork commit to ship}"
-  ZL_QEMU_COMMIT=$(git -C "$QEMU_REPO" rev-parse --verify "$ZL_QEMU_COMMIT^{commit}")
+  if [ -d "$QEMU_REPO/.git" ]; then ZL_QEMU_COMMIT=$(git -C "$QEMU_REPO" rev-parse --verify "$ZL_QEMU_COMMIT^{commit}"); fi
   # A clean clone at the pinned commit: never the live working tree another session is editing.
   if [ ! -d "$B/qemu-src/.git" ]; then git clone -q --no-checkout "$QEMU_REPO" "$B/qemu-src"; fi
   git -C "$B/qemu-src" fetch -q "$QEMU_REPO" "$ZL_QEMU_COMMIT"

@@ -1,10 +1,10 @@
 # Third-party components
 
-Zero Lab's own code is GPL-2.0-or-later (see LICENSE). The binaries it ships contain:
+Zero Lab's own code is GPL-2.0-or-later (see LICENSE); its source is https://github.com/dsellerbrock/zero-lab. The binaries it ships contain:
 
 | Component | Version | Licence | Where | Source |
 |---|---|---|---|---|
-| QEMU (fork with Raspberry Pi GPIO events, raspi3ap virtio-mmio, HVF 4 KiB granule, Venus) | pinned commit (see source README) | GPL-2.0 | all | `qemu-zero-lab-<commit>.tar.xz` in the source folder |
+| QEMU fork [qemu-raspi-zero2w](https://github.com/dsellerbrock/qemu-raspi-zero2w) (GPIO events, raspi3ap virtio-mmio, HVF 4 KiB granule, Venus) | d4fa079b | GPL-2.0 | all | `qemu-zero-lab-<commit>.tar.xz` in the source folder, and https://github.com/dsellerbrock/qemu-raspi-zero2w |
 | virglrenderer (Venus) | pinned commit | MIT | all | `virglrenderer-<commit>.tar.xz` |
 | libepoxy | pinned commit | MIT | macOS | `libepoxy-<commit>.tar.xz` |
 | GLib | 2.90.1 | LGPL-2.1-or-later | macOS (dynamic library, replaceable) | `glib-2.90.1.tar.xz` |
