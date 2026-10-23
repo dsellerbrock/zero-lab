@@ -68,13 +68,13 @@ build() {
   say "Building QEMU (this takes a while: 10-40 minutes)"
   mkdir -p "$WORK/qemu-build"
   (cd "$WORK/qemu-build" && PKG_CONFIG_PATH="$DEST/qemu/lib/pkgconfig" "$WORK/qemu/configure" \
-     --prefix="$DEST/qemu" --target-list=aarch64-softmmu --enable-slirp --enable-vnc --enable-tools \
+     --prefix="$DEST/qemu" --extra-ldflags="-Wl,-rpath,$DEST/qemu/lib" --target-list=aarch64-softmmu --enable-slirp --enable-vnc --enable-tools \
      --enable-opengl --enable-virglrenderer --disable-docs --disable-gtk --disable-sdl \
      --disable-guest-agent --disable-capstone >/dev/null)
   ninja -C "$WORK/qemu-build" -j"$JOBS" install >/dev/null
   echo "$stamp" > "$DEST/qemu/.built-from"
   rm -rf "$WORK"
-  say "QEMU: $("$DEST/qemu/bin/qemu-system-aarch64" --version | head -n1)"
+  say "QEMU: $(LD_LIBRARY_PATH="$DEST/qemu/lib" "$DEST/qemu/bin/qemu-system-aarch64" --version | head -n1)"
 }
 
 install_app() {
