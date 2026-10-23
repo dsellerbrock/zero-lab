@@ -192,7 +192,7 @@ def build_argv(qemu, cfg, img, run, ports, mode="desktop", kernel=None):
             "-chardev", f"socket,id=uart,{at['serial']},server=on,wait=off,logfile={run / 'serial.log'}",
             "-serial", "chardev:uart",
             "-monitor", "none", "-qmp", f"{at['qmp']},server=on,wait=off",
-            "-qtest", f"{at['qtest']},server=on,wait=off",
+            "-qtest", f"{at['qtest']},server=on,wait=off", "-qtest-log", "none",  # else every GPIO poll is logged
             "-usb", "-device", "usb-kbd", "-device", "usb-tablet"]
     argv += ["-accel", "hvf"] if cfg["accel"] == "hvf" else ["-accel", "tcg,thread=multi"]
     if virtio_root:  # raspi-zero2w 5fbae66: virtio-blk on the second virtio-mmio slot, write-back cache

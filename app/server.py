@@ -568,6 +568,25 @@ def make_handler(app, token, port):
     return H
 
 
+def lock_data(data):
+    """One engine per data folder: two would boot the same Pi disk at once and corrupt it (QEMU's own image
+    locking does nothing on Windows). -> the open lock file to keep, or None if another engine holds it."""
+    data.mkdir(parents=True, exist_ok=True)
+    f = open(data / "engine.lock", "a+")
+    try:
+        if os.name == "nt":
+            import msvcrt  # noqa: PLC0415
+            f.seek(0)
+            msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl  # noqa: PLC0415
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        f.close()
+        return None
+    return f
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--port", type=int, default=0)
@@ -576,6 +595,13 @@ def main():
     ap.add_argument("--watch-stdin", action="store_true", help="exit when stdin closes (app wrapper)")
     args = ap.parse_args()
 
+    lock = lock_data(args.data)  # held until exit
+    if not lock:  # e.g. the shortcut double-clicked twice: show the running one instead
+        url = (args.data / "engine.url").read_text().strip() if (args.data / "engine.url").exists() else ""
+        print(f"Zero Lab is already running{': ' + url if url else ''}", flush=True)
+        if args.open and url:
+            webbrowser.open(url)
+        return
     app = App(args.data)
     token = secrets.token_urlsafe(24)
     srv = ThreadingHTTPServer(("127.0.0.1", args.port), None)
@@ -584,6 +610,7 @@ def main():
     srv.daemon_threads = True
     url = f"http://127.0.0.1:{port}/"
     print(f"ZL_URL {url}", flush=True)
+    (args.data / "engine.url").write_text(url)
 
     def shutdown():
         app.stop()

@@ -244,6 +244,7 @@ class VmTest(unittest.TestCase):
         self.assertIn("restrict=on", p)
         self.assertIn(f"-qmp unix:{d}/qmp.sock,server=on,wait=off", p)
         self.assertIn("virtio-gpu-device", p)
+        self.assertIn("-qtest-log none", p)
 
     def test_tcp_channels(self):
         """Windows: no AF_UNIX in Python, so QEMU's serial, QMP and QTest listen on loopback ports."""
@@ -439,6 +440,18 @@ class FakeFiles:
 
     def __getattr__(self, name):  # mkdir, rename, delete, terminal
         return lambda *a: self.calls.append((name, *a))
+
+
+class LockTest(unittest.TestCase):
+    def test_one_engine_per_data_folder(self):
+        d = Path(tempfile.mkdtemp())
+        first = server.lock_data(d)
+        self.assertIsNotNone(first)
+        self.assertIsNone(server.lock_data(d))  # a second engine on the same Pi disks is refused
+        first.close()
+        again = server.lock_data(d)
+        self.assertIsNotNone(again)
+        again.close()
 
 
 class ServerTest(unittest.TestCase):
