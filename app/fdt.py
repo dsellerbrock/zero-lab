@@ -1,7 +1,7 @@
 """Minimal flattened device tree (DTB) editor: parse, edit properties, write back.
 
 Enough for the handful of edits Zero Lab makes to the stock Raspberry Pi DTB,
-so friends need no dtc/fdtput.
+so no one needs dtc/fdtput.
 """
 import struct
 

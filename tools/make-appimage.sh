@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build Zero-Lab-<version>-linux-x86_64.AppImage: one file a friend marks executable and double-clicks
+# Build Zero-Lab-<version>-linux-x86_64.AppImage: one file anyone marks executable and double-clicks
 # (no compile, no root). linux/setup.sh stays as the build-from-source fallback.
 #
 #   tools/make-appimage.sh      on a Linux x86_64 host with podman or docker; the build runs in ubuntu:22.04

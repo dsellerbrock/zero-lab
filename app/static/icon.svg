@@ -63,7 +63,7 @@
     </g>
   </g>
 
-  <!-- a little raspberry friend (generic fruit) -->
+  <!-- a little raspberry (generic fruit) -->
   <g transform="translate(748 222) rotate(16)">
     <path d="M0 -84 L12 -62 L40 -70 L26 -50 L52 -40 L22 -38 L0 -54 L-22 -38 L-52 -40 L-26 -50 L-40 -70 L-12 -62 Z" fill="#3b9a4b" stroke="#2a7a39" stroke-width="4" stroke-linejoin="round"/>
     <g fill="#e0245e" stroke="#a3123f" stroke-width="4">

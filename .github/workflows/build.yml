@@ -1,5 +1,5 @@
 # Builds every Zero Lab download (macOS dmg, Windows setup.exe, Linux AppImage) from this repository alone
-# (inputs pinned in tools/pins.sh), installs each one the way a friend would and runs the e2e against it.
+# (inputs pinned in tools/pins.sh), installs each one the way anyone would and runs the e2e against it.
 # Pull requests get the builds and e2e as checks. On main, when mac/Info.plist has a version with no release
 # yet and every e2e is green, the release job publishes it; the website (pisim.ellerbrock.dev) reads
 # releases/latest of this repository, so it updates by itself. To release: a PR that bumps the version.
@@ -95,7 +95,7 @@ jobs:
             build/windows/Zero-Lab-*-windows-x64-sources.zip
           if-no-files-found: error
 
-  # Dead-on-arrival checks: install each download the way a friend would, then run tests/e2e.py against
+  # Dead-on-arrival checks: install each download the way anyone would, then run tests/e2e.py against
   # that installed copy (provision, boot, screenshot, Files, every sample). Separate from the build jobs, so
   # a flaky runner never blocks the artifacts; a release still needs every e2e job green (docs/BUILDING.md).
   # Runners have no Apple Hypervisor (no nested virt) and no GPU for Venus: TCG + soft graphics everywhere.
@@ -225,7 +225,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with: { name: windows-installer, path: dl }
-      - name: Install silently (/S), per-user like a friend's double-click; app, uninstaller and shortcuts must exist
+      - name: Install silently (/S), per-user like a double-click install; app, uninstaller and shortcuts must exist
         run: |
           Start-Process (Get-Item dl\Zero-Lab-*-windows-x64-setup.exe).FullName -ArgumentList /S -Wait
           $inst = "$env:LOCALAPPDATA\Programs\Zero Lab"
