@@ -15,7 +15,7 @@ This is the fast version: the Pi's CPU runs on your Mac's own cores (Apple Hyper
 ### Windows 10/11 (64-bit)
 1. Double-click `Zero-Lab-…-windows-x64-setup.exe`. Windows SmartScreen may say "Windows protected your PC": click **More info**, then **Run anyway**. Zero Lab is free software without a paid code-signing certificate.
 2. Click through the wizard: it shows the licence, installs into `%LOCALAPPDATA%\Programs\Zero Lab` (no administrator password), and adds **Zero Lab** to the Start menu and your desktop.
-3. Leave **Launch Zero Lab** ticked and click **Finish**. Zero Lab opens in your web browser. A small black window sits in the taskbar; closing it stops the Pi.
+3. Leave **Launch Zero Lab** ticked and click **Finish**. Zero Lab opens in its own window. Close the window when you're done: Zero Lab shuts the Pi down and quits completely. (The window comes from Microsoft Edge, which is part of Windows; if you removed Edge, install Edge or Google Chrome.)
 
 Your Pi's disk images and layouts live in `%LOCALAPPDATA%\Zero Lab`. To uninstall, use **Settings → Apps → Installed apps → Zero Lab**; it keeps that data unless you tick **Also remove my Pi data**.
 

@@ -27,6 +27,7 @@ import guest
 import image
 import readiness
 import vm as vmod
+import window
 
 APP = Path(__file__).resolve().parent
 STATIC = APP / "static"
@@ -593,15 +594,26 @@ def main():
     ap.add_argument("--data", type=Path, default=default_data_dir())
     ap.add_argument("--open", action="store_true", help="open the UI in the default browser")
     ap.add_argument("--watch-stdin", action="store_true", help="exit when stdin closes (app wrapper)")
+    ap.add_argument("--app-window", action="store_true",
+                    help="Windows: show the UI in its own window; closing it stops the Pi and exits")
     args = ap.parse_args()
 
     lock = lock_data(args.data)  # held until exit
+    if sys.stdout is None:  # pythonw (the Windows shortcut) has no console
+        sys.stdout = sys.stderr = open(args.data / "engine.log", "a", buffering=1, encoding="utf-8")
     if not lock:  # e.g. the shortcut double-clicked twice: show the running one instead
         url = (args.data / "engine.url").read_text().strip() if (args.data / "engine.url").exists() else ""
         print(f"Zero Lab is already running{': ' + url if url else ''}", flush=True)
-        if args.open and url:
+        if url and args.app_window:
+            window.open_window(url, args.data)
+        elif url and args.open:
             webbrowser.open(url)
         return
+    if args.app_window:
+        window.end_children_with_me()
+        if not window.find_browser():
+            window.message("Zero Lab shows its window with Microsoft Edge or Google Chrome. Install one, then start Zero Lab again.")
+            return
     app = App(args.data)
     token = secrets.token_urlsafe(24)
     srv = ThreadingHTTPServer(("127.0.0.1", args.port), None)
@@ -625,6 +637,8 @@ def main():
         threading.Thread(target=lambda: (sys.stdin.buffer.read(), shutdown()), daemon=True).start()
     if args.open:
         webbrowser.open(url)
+    if args.app_window:  # the window's process ends when the window closes; so does Zero Lab
+        threading.Thread(target=lambda: (window.open_window(url, args.data).wait(), shutdown()), daemon=True).start()
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

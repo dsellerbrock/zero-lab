@@ -80,7 +80,6 @@ installer() {
   [ -f "$B/qemu/qemu-system-aarch64.exe" ] || { echo "run '$0 qemu' first" >&2; exit 1; }
   [ -f "$ROOT/kernel/kernel8-virtio.img" ] || { echo "kernel/kernel8-virtio.img is missing (kernel/build.sh)" >&2; exit 1; }
   rm -rf "$S" "$B/sources" && mkdir -p "$Z" "$G"
-  cp "$ROOT/windows/Zero Lab.cmd" "$S/"
   sed 's/$/\r/' "$ROOT/LICENSE" > "$S/LICENSE.txt"  # the wizard's licence page
   magick -background none "$ROOT/app/static/icon.svg" -define icon:auto-resize=256,64,48,32,16 "$S/icon.ico"
   cp -R "$ROOT/app" "$ROOT/samples" "$Z/"

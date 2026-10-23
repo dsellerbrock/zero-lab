@@ -15,7 +15,7 @@ Zero Lab runs on **[qemu-raspi-zero2w](https://github.com/dsellerbrock/qemu-rasp
 ## Get it
 - **macOS** (Apple Silicon, 26+): `Zero-Lab-<version>-macOS-arm64.dmg`. CPU runs on HVF; graphics are Venus (Vulkan via Metal).
 - **Linux**: `Zero-Lab-<version>-linux-windows.zip`, then `bash setup.sh` (or double-click `Install Zero Lab (Linux).desktop`). It builds the bundled QEMU fork and adds a menu icon.
-- **Windows 10/11 x64**: `Zero-Lab-<version>-windows-x64-setup.exe`. It's a per-user install wizard: no admin, no WSL. It adds Start-menu and desktop shortcuts, and its uninstaller keeps your Pi data. QEMU is cross-built with mingw-w64, and Python comes with it. The CPU is emulated (TCG) and graphics are software, as they'd be under WSL. The GPL sources are in `…-windows-x64-sources.zip`. Fallback: `Install Zero Lab (Windows).cmd` in the Linux zip sets up WSL2 + Ubuntu and runs `setup.sh` there.
+- **Windows 10/11 x64**: `Zero-Lab-<version>-windows-x64-setup.exe`. It's a per-user install wizard: no admin, no WSL. It adds Start-menu and desktop shortcuts, and its uninstaller keeps your Pi data. Zero Lab opens in its own maximised window (Edge's app mode, which is part of Windows), and closing that window shuts the Pi down and ends every Zero Lab process. QEMU is cross-built with mingw-w64, and Python comes with it. The CPU is emulated (TCG) and graphics are software, as they'd be under WSL. The GPL sources are in `…-windows-x64-sources.zip`. Fallback: `Install Zero Lab (Windows).cmd` in the Linux zip sets up WSL2 + Ubuntu and runs `setup.sh` there.
 
 Downloads: https://pisim.ellerbrock.dev. Instructions for friends: [docs/FRIENDS.md](docs/FRIENDS.md).
 
@@ -59,7 +59,7 @@ app/            server.py (stdlib HTTP + SSE + VNC websocket pipe), vm.py (QEMU 
                 guest.py (SSH: code + files), readiness.py, guest/ (scripts that run inside the Pi),
                 static/ (UI, vendored noVNC and B612 fonts)
 mac/            ZeroLab.swift (window), build-bundle.sh (deps -> qemu -> app -> dmg), relocate.py
-linux/ windows/ installers; windows/installer.nsi (Windows install wizard), Zero Lab.cmd (its launcher)
+linux/ windows/ installers; windows/installer.nsi (Windows install wizard)
 samples/        one program + layout per GPIO part
 kernel/         build.sh + config for the Pi kernel (Pi OS 6.18.50 with virtio built in)
 tools/          pins.sh (every pinned input), source-bundle.sh (GPL sources), make-linux-windows-bundle.sh,
