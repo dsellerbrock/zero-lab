@@ -405,6 +405,17 @@ class ServerTest(unittest.TestCase):
         self.assertIn(b'"tok"', body)
         self.assertEqual(self.req("GET", "/static/../server.py")[0], 404)
 
+    def test_samples(self):
+        samples = {x["name"]: x["about"] for x in json.loads(self.req("GET", "/api/state", token="tok")[1])["samples"]}
+        self.assertIn("GPIO", samples["button-led-c"])
+        code, body = self.req("POST", "/api/project/sample", token="tok", body={"name": "button-led-c"})
+        self.assertEqual(code, 200)
+        r = json.loads(body)
+        self.assertIn("button-led-c/Makefile", r["staged"])
+        self.assertTrue(r["layout"]["widgets"])
+        self.assertEqual(self.req("POST", "/api/project/sample", token="tok", body={"name": "../app"})[0], 400)
+        self.req("POST", "/api/project/clear", token="tok", body={})
+
     def test_settings_locked_while_running(self):
         class Running:
             def poll(self):

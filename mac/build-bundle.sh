@@ -100,6 +100,7 @@ app() {
   swiftc -O -target arm64-apple-macos26.0 "$ROOT/mac/ZeroLab.swift" -o "$APP/Contents/MacOS/Zero Lab"
   # app code
   rsync -a --exclude __pycache__ "$ROOT/app/" "$R/app/"
+  rsync -a --exclude __pycache__ "$ROOT/samples/" "$R/samples/"
   # the Pi kernel (kernel/build.sh)
   mkdir -p "$R/kernel" && cp "$ROOT/kernel/kernel8-virtio.img" "$R/kernel/"
   # python (relocatable CPython build; PSF licence)

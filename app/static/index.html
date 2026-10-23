@@ -58,7 +58,7 @@
         <section class="needs" aria-labelledby="needs-title">
           <h3 id="needs-title">What the Pi needs</h3>
           <ul id="ready-inline" class="checklist compact"></ul>
-          <p class="note">You never download a kernel, firmware or device tree yourself. They come from the Pi OS image. <button type="button" class="link" data-open-ready>See details</button></p>
+          <p class="note">You never download a kernel, firmware or device tree yourself: the kernel comes with Zero Lab and the device tree from the Pi OS image. <button type="button" class="link" data-open-ready>See details</button></p>
         </section>
         <ol class="steps">
           <li class="step" id="step-os">
@@ -107,6 +107,12 @@
           <ul id="staged" class="staged"></ul>
         </div>
         <div class="code-side">
+          <div class="row samples">
+            <label for="sample-list">Samples</label>
+            <select id="sample-list" aria-describedby="sample-about"></select>
+            <button id="sample-load" class="btn" type="button">Load</button>
+          </div>
+          <p id="sample-about" class="note"></p>
           <div class="row">
             <button id="run" class="btn go" type="button">Build and run</button>
             <button id="pstop" class="btn" type="button">Stop program</button>
@@ -176,7 +182,7 @@
     <p id="ready-summary" class="ready-summary"></p>
     <ul id="ready-full" class="checklist"></ul>
     <footer class="drawer-foot">
-      <p class="note">Green is ready. Amber works but slower. Red is needed before Boot. You never download a kernel, firmware or device tree yourself: Zero Lab copies the kernel and device tree out of the Pi OS image, and QEMU starts the kernel directly, so the Pi's boot firmware isn't used.</p>
+      <p class="note">Green is ready. Amber works but slower. Red is needed before Boot. You never download a kernel, firmware or device tree yourself: Zero Lab includes the Pi OS kernel built with QEMU's fast screen and disk drivers, takes the device tree from the Pi OS image, and QEMU starts the kernel directly, so the Pi's boot firmware isn't used.</p>
     </footer>
   </form>
 </dialog>

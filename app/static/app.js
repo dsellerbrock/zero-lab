@@ -287,6 +287,15 @@ document.body.append(picker);
 $("run").onclick = act(() => api("/api/project/run", {}));
 $("pstop").onclick = act(() => api("/api/project/stop", {}));
 $("pclear").onclick = act(async () => { await api("/api/project/clear", {}); showStaged([]); });
+// Samples: the code is staged and its parts go on the breadboard, so Build and run works straight away
+const sampleAbout = () => { $("sample-about").textContent = (state.samples.find((x) => x.name === $("sample-list").value) || {}).about || ""; };
+$("sample-list").onchange = sampleAbout;
+$("sample-load").onclick = act(async () => {
+  const name = $("sample-list").value;
+  const r = await api("/api/project/sample", { name });
+  showStaged(r.staged); bb.load(r.layout); applyIdle();
+  toast(`Loaded “${name}”: its parts are on the breadboard. Press Build and run.`);
+});
 $("autostart").onchange = act((e) => api("/api/project/autostart", { on: e.target.checked }));
 
 // ---------- 40-pin header, by physical position ----------
@@ -375,6 +384,9 @@ function render() {
   files.status(status);
   renderSummary(); renderSettings(); updateControls(); renderScreen();
   if (!$("setup").hidden && !state.busy) renderSetup();
+  const sl = $("sample-list");
+  if (!sl.options.length && state.samples.length) { fill(sl, state.samples.map((x) => x.name), "button-led-py"); sampleAbout(); }
+  $("sample-load").disabled = !state.samples.length;
   const ll = $("layout-list"), names = state.layouts;
   fill(ll, names.length ? names : [""], ll.value, names.length ? names : ["No saved layouts yet"]);
   $("layout-load").disabled = $("layout-export").disabled = !names.length;

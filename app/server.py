@@ -30,6 +30,7 @@ import vm as vmod
 
 APP = Path(__file__).resolve().parent
 STATIC = APP / "static"
+SAMPLES = APP.parent / "samples"  # shipped next to app/ (Mac bundle, Linux install, checkout)
 TYPES = {".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml",
          ".png": "image/png", ".json": "application/json", ".ico": "image/x-icon"}
 
@@ -153,7 +154,7 @@ class App:
                 "paths": self.paths(), "saved_at": self.saved_at,
                 "catalog": image.CATALOG, "status": self.vm.status, "busy": self.busy,
                 "layouts": sorted(p.stem for p in (self.data / "layouts").glob("*.json")),
-                "staged": [r for r, _ in self.files]}
+                "staged": [r for r, _ in self.files], "samples": self.samples()}
 
     # ---------- VM ----------
     def on_vm_event(self, kind, **data):
@@ -276,6 +277,25 @@ class App:
         if not name or "/" in name or name.startswith(".") or len(name) > 64:
             raise ValueError("bad layout name")
         return self.data / "layouts" / f"{name}.json"
+
+    # ---------- samples ----------
+    def samples(self):
+        """[{name, about}]: about is the README's first line of text after the title."""
+        out = []
+        for d in sorted(SAMPLES.glob("*/layout.json")):
+            readme = d.parent / "README.md"
+            text = [x.strip() for x in (readme.read_text().splitlines() if readme.exists() else [])]
+            out.append({"name": d.parent.name, "about": next((x for x in text if x and not x.startswith("#")), "")})
+        return out
+
+    def load_sample(self, name):
+        """Stage a sample's files as the project; returns its breadboard layout."""
+        if name not in {s["name"] for s in self.samples()}:
+            raise ValueError(f"no sample {name!r}")
+        d = SAMPLES / name
+        self.files = [(f"{name}/{p.relative_to(d).as_posix()}", p.read_bytes()) for p in sorted(d.rglob("*"))
+                      if p.is_file() and "__pycache__" not in p.parts]
+        return {"staged": [r for r, _ in self.files], "layout": json.loads((d / "layout.json").read_text())}
 
 
 def make_handler(app, token, port):
@@ -468,6 +488,8 @@ def make_handler(app, token, port):
                 app.delete_image(b["name"])
             elif path == "/api/project/clear":
                 app.files = []
+            elif path == "/api/project/sample":
+                return app.load_sample(str(b.get("name", "")))
             elif path in ("/api/project/run", "/api/project/stop", "/api/project/autostart"):
                 if not app.guest or app.vm.status != "running":
                     raise RuntimeError("boot the VM first")

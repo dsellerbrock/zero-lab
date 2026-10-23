@@ -176,6 +176,7 @@ input[type=checkbox], input[type=radio] { accent-color: var(--board); width: 16p
   box-shadow: inset 0 3px 0 -1px rgb(196 45 37 / .45), inset 0 -3px 0 -1px rgb(46 111 208 / .45); }
 .layouts { display: grid; gap: var(--s2); }
 .layouts select { min-width: 9em; }
+.samples select { flex: 1; min-width: 0; }
 
 /* parts on the board */
 .w { position: absolute; background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-s); min-width: 72px; max-width: 150px;
