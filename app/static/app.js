@@ -150,14 +150,14 @@ function renderSettings() {
   fill($("accel"), h.accels, c.accel, h.accels.map((a) => ACCEL[a]));
   fill($("gpu"), h.gpus, c.gpu, h.gpus.map((g) => GPU[g]));
   fill($("display"), h.displays, c.display, h.displays.map((d) => ({ app: "In Zero Lab", window: "In a separate window" }[d])));
-  $("ram").value = String(c.ram); $("cpus").value = String(c.cpus);
+  $("ram").value = String(c.ram);
   $("network").checked = c.network; $("snapshot").checked = c.snapshot;
   $("config-path").textContent = tilde(state.paths.config);
   $("layouts-path").textContent = tilde(state.paths.layouts);
   $("cache-path").textContent = tilde(state.paths.cache);
 }
 async function saveCfg() {
-  state = await api("/api/config", { ram: +$("ram").value, cpus: +$("cpus").value, accel: $("accel").value,
+  state = await api("/api/config", { ram: +$("ram").value, accel: $("accel").value,
     gpu: $("gpu").value, display: $("display").value, network: $("network").checked,
     snapshot: $("snapshot").checked, ...(activeImage() ? { image: $("image").value } : {}) });
   render();
@@ -512,7 +512,6 @@ document.addEventListener("click", act(async (e) => {
 // ---------- info tips: hover, focus or click (touch); Escape closes ----------
 const TIPS = {
   ram: "<p>How much memory the Pi gets. A real Zero 2 W has 512 MB. More makes the desktop smoother but takes it from your computer.</p>",
-  cpus: "<p>The Zero 2 W has 4 cores. Fewer leaves more of your computer free for other things.</p>",
   accel: "<p><b>Fast (Apple HVF)</b>: Apple's built-in hypervisor runs the Pi's CPU directly on your Mac's cores. Fastest. Apple Silicon only.</p><p><b>Emulated (TCG)</b>: QEMU translates every Pi instruction in software. Works on any computer, several times slower.</p><p><b>KVM</b> is Linux's hypervisor; it can't run this Pi model yet, so Linux and Windows use TCG.</p>",
   gpu: "<p><b>Venus</b>: passes the Pi's Vulkan graphics to your computer's GPU (through Metal on a Mac). Fastest 3D.</p><p><b>virgl</b>: the older OpenGL route to your GPU. Try it if Venus misbehaves.</p><p><b>Software</b>: the Pi draws everything on the CPU. Always works; 3D is slow.</p>",
   display: "<p><b>In Zero Lab</b> shows the Pi's screen in this window. <b>Separate window</b> uses QEMU's own window instead, which can feel snappier.</p>",
