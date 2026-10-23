@@ -17,10 +17,14 @@ This is the fast version: the Pi's CPU runs on your Mac's own cores (Apple Hyper
 2. Double-click **Install Zero Lab (Windows).cmd**. It installs WSL2 and Ubuntu if you don't have them (Windows asks for permission and may need a restart; afterwards, double-click it again), then builds Zero Lab. That takes 10–40 minutes the first time.
 3. Then double-click **Zero Lab** on your desktop. It opens in your browser. Closing the small black window stops the Pi.
 
-### Linux (Debian/Ubuntu, Fedora, Arch)
-1. Unzip `Zero-Lab-…-linux-windows.zip`.
-2. Double-click **Install Zero Lab (Linux).desktop**. GNOME may ask you to "Allow Launching" first. If double-clicking only opens a text editor, open a terminal in the folder and run `bash setup.sh`. It asks for your password to install build tools, then builds Zero Lab (10–40 minutes).
-3. Then start **Zero Lab** from your app menu or desktop.
+### Linux (Intel/AMD PC: Ubuntu 22.04 or newer, Fedora, Arch, Mint, …)
+1. Download `Zero-Lab-…-linux-x86_64.AppImage`.
+2. Make it executable: right-click it → **Properties** → turn on **Allow executing file as program** (or run `chmod +x Zero-Lab-*.AppImage` in a terminal).
+3. Double-click it. A terminal window opens (closing it stops the Pi) and Zero Lab opens in your browser. The first time, it offers to add Zero Lab to your app menu.
+
+Your images and settings live in `~/.local/share/zero-lab`; the AppImage itself never changes. It needs FUSE's `fusermount` (the `fuse3` package, already installed on Ubuntu, Fedora and most desktops). If double-clicking does nothing, run it from a terminal (`./Zero-Lab-*.AppImage`) to see why; if it says FUSE is missing, install `fuse3` or run `./Zero-Lab-*.AppImage --appimage-extract-and-run`.
+
+**Other computers** (ARM, or a distribution older than Ubuntu 22.04): Zero Lab can be built from source with `linux/setup.sh`; see `docs/BUILDING.md` in the source code.
 
 **How fast is it on Windows and Linux?** On a normal Intel/AMD PC, the Pi's ARM CPU has to be emulated instruction by instruction, because no PC can run ARM code natively. Everything works, but booting and apps are several times slower than on an Apple Silicon Mac.
 
@@ -49,4 +53,4 @@ Drop a file, folder or `.zip` on **Your code**, then click **Build & run**. Outp
 - Or pick a ready-made example under **Samples** and press **Load**: its code is staged and its parts appear on the breadboard. Then **Build & run**. With `button-led-py`, press the Button widget and the LED widget lights.
 
 ## Licences
-Zero Lab is free software under the GNU GPL v2 or later. It includes QEMU (GPL-2.0), a Linux kernel for the Pi (GPL-2.0; its source is the `kernel-source` download next to the app) and other components listed in `THIRD-PARTY.md`. The complete source code is in the **Source code (GPL)** folder (on the Mac disk image) or the `sources` folder (in the zip), and online at https://github.com/dsellerbrock/zero-lab and https://github.com/dsellerbrock/qemu-raspi-zero2w. Raspberry Pi OS is downloaded from raspberrypi.com under its own licences and is not included. Raspberry Pi is a trademark of Raspberry Pi Ltd. Zero Lab is not affiliated with them.
+Zero Lab is free software under the GNU GPL v2 or later. It includes QEMU (GPL-2.0), a Linux kernel for the Pi (GPL-2.0; its source is the `kernel-source` download next to the app) and other components listed in `THIRD-PARTY.md`. The complete source code is in the **Source code (GPL)** folder (on the Mac disk image) the `sources` folder (in the zip) or the `linux-x86_64-source` download next to the AppImage, and online at https://github.com/dsellerbrock/zero-lab and https://github.com/dsellerbrock/qemu-raspi-zero2w. Raspberry Pi OS is downloaded from raspberrypi.com under its own licences and is not included. Raspberry Pi is a trademark of Raspberry Pi Ltd. Zero Lab is not affiliated with them.

@@ -1,0 +1,62 @@
+#!/bin/bash
+# Zero Lab AppImage entry point (tools/make-appimage.sh puts it at the AppDir root).
+# Double-clicked from a file manager there is no terminal, so nothing would stop the Pi: reopen in one
+# (closing it stops the Pi cleanly). Offers an app-menu entry once, then starts the server and the browser.
+# The AppImage is read-only; images and settings live in ~/.local/share/zero-lab.
+HERE=$(dirname "$(readlink -f "$0")")
+SELF=${APPIMAGE:-$HERE/AppRun}
+DATA=${XDG_DATA_HOME:-$HOME/.local/share}/zero-lab
+GUI=${DISPLAY:-$WAYLAND_DISPLAY}
+
+if [ ! -t 0 ] && [ -n "$GUI" ] && [ -z "$ZL_IN_TERMINAL" ]; then
+  export ZL_IN_TERMINAL=1
+  for t in "x-terminal-emulator -e" "gnome-terminal --" "ptyxis --" "konsole -e" "xfce4-terminal -x" "xterm -e"; do
+    command -v "${t%% *}" >/dev/null && exec $t "$SELF" "$@"
+  done
+fi
+
+ask() { # question -> 0 for yes
+  if [ -t 0 ]; then read -r -p "$1 [Y/n] " a; [[ ! $a =~ ^[Nn] ]]
+  elif command -v zenity >/dev/null; then zenity --question --text "$1"
+  elif command -v kdialog >/dev/null; then kdialog --yesno "$1"
+  else return 1; fi
+}
+
+fail() {
+  echo "Zero Lab: $1" >&2
+  [ -t 0 ] || { zenity --error --text "$1" 2>/dev/null || kdialog --error "$1" 2>/dev/null; }
+  [ -t 0 ] && read -r -p "Press Enter to close. "
+  exit 1
+}
+
+# App-menu entry: offered once; once added, kept pointing at wherever the AppImage now is.
+APPS=${XDG_DATA_HOME:-$HOME/.local/share}/applications
+ENTRY=$APPS/zero-lab-appimage.desktop
+if [ -n "$APPIMAGE" ] && [ -n "$GUI" ]; then
+  mkdir -p "$DATA"
+  if [ -f "$ENTRY" ] || { [ ! -e "$DATA/.menu-asked" ] && : > "$DATA/.menu-asked" && ask "Add Zero Lab to your app menu?"; }; then
+    mkdir -p "$APPS" && cp "$HERE/zero-lab.png" "$DATA/icon.png"
+    cat > "$ENTRY" <<EOF
+[Desktop Entry]
+Type=Application
+Name=Zero Lab
+Comment=Raspberry Pi Zero 2 W playground
+Exec="$APPIMAGE"
+Icon=$DATA/icon.png
+Terminal=true
+Categories=Development;Electronics;
+EOF
+  fi
+fi
+
+command -v ssh >/dev/null && command -v ssh-keygen >/dev/null ||
+  fail "OpenSSH is missing; install your distribution's openssh-client (or openssh) package, then start Zero Lab again."
+
+# Python's bundled OpenSSL looks for Debian's certificate paths; point it at the host's bundle elsewhere.
+if [ -z "$SSL_CERT_FILE" ]; then
+  for f in /etc/ssl/certs/ca-certificates.crt /etc/pki/tls/certs/ca-bundle.crt /etc/ssl/ca-bundle.pem /etc/ssl/cert.pem; do
+    [ -f "$f" ] && { export SSL_CERT_FILE=$f; break; }
+  done
+fi
+export ZL_QEMU_DIR="$HERE/qemu" PATH="$HERE/bin:$PATH" PYTHONDONTWRITEBYTECODE=1
+exec "$HERE/python/bin/python3" "$HERE/app/server.py" --open "$@"

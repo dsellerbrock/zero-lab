@@ -14,10 +14,14 @@ Zero Lab's own code is GPL-2.0-or-later (see LICENSE); its source is https://git
 | pixman | Homebrew version at build time (`VERSIONS.txt`) | MIT | macOS | https://cairographics.org/releases/ |
 | libslirp | Homebrew version at build time (`VERSIONS.txt`) | BSD-3-Clause | macOS | https://gitlab.freedesktop.org/slirp/libslirp |
 | MoltenVK | 1.4.2 (official release) | Apache-2.0 | macOS | https://github.com/KhronosGroup/MoltenVK |
-| CPython (python-build-standalone) | 3.12.12 | PSF-2.0 (+ bundled lib licences) | macOS | https://github.com/astral-sh/python-build-standalone |
+| CPython (python-build-standalone) | 3.12.12 | PSF-2.0 (+ bundled lib licences) | macOS, Linux AppImage | https://github.com/astral-sh/python-build-standalone |
+| GLib, util-linux libmount/libblkid | Ubuntu 22.04 packages (`ubuntu/README.txt`) | LGPL-2.1-or-later | Linux AppImage (shared libraries in `qemu/lib`, replaceable) | `ubuntu/` in `Zero-Lab-<version>-linux-x86_64-source.tar` |
+| pixman, libslirp, libfdt, libepoxy, libffi, PCRE, PCRE2, libselinux, libbsd, libmd | Ubuntu 22.04 packages (`ubuntu/README.txt`) | MIT / BSD / public domain (per package) | Linux AppImage | `ubuntu/` in the `-source.tar` |
+| mtools | Ubuntu 22.04 package (4.0.32) | GPL-3.0-or-later | Linux AppImage | `ubuntu/` in the `-source.tar` |
+| AppImage type2 runtime (contains libfuse3, squashfuse, zstd) | 20251108 | MIT; libfuse3 LGPL-2.1 | Linux AppImage (the file's ELF header) | https://github.com/AppImage/type2-runtime/releases/tag/20251108 |
 | B612 and B612 Mono fonts (latin subset, woff2) | Google Fonts build of 1.008 | SIL OFL 1.1 | all | `app/static/fonts/` (licence: `app/static/fonts/OFL.txt`), https://github.com/polarsys/b612 |
 | noVNC | 1.7.0 | MPL-2.0 (core), MIT (pako) | all | shipped as source in `app/static/novnc/` (licence: `app/static/novnc/LICENSE.txt`) |
 
-On Linux and Windows (WSL), QEMU and virglrenderer are built from the bundled sources on your machine, and the other libraries come from your distribution.
+With the Linux/Windows zip (`setup.sh`, WSL), QEMU and virglrenderer are built from the bundled sources on your machine, and the other libraries come from your distribution. The Linux AppImage bundles the libraries listed above; glibc and the GPU drivers come from your distribution.
 
 Raspberry Pi OS itself is not included. Zero Lab downloads it from raspberrypi.com, where it is offered under its own licences. "Raspberry Pi" is a trademark of Raspberry Pi Ltd. Zero Lab is not affiliated with Raspberry Pi Ltd.
