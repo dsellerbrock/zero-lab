@@ -447,7 +447,10 @@ def make_handler(app, token, port):
                 app.reveal(b["what"])
             elif path == "/api/screenshot":
                 out = app.vm.run / f"screen-{int(time.time())}.png"
-                app.vm.qmp("screendump", filename=str(out), format="png")
+                ppm = out.with_suffix(".ppm")
+                app.vm.qmp("screendump", filename=str(ppm))
+                vmod.ppm_to_png(ppm, out)
+                ppm.unlink()
                 return {"path": str(out)}
             else:
                 raise KeyError(path)

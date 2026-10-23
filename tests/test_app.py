@@ -234,6 +234,19 @@ class ReadinessTest(unittest.TestCase):
         self.assertTrue(text)
 
 
+class PngTest(unittest.TestCase):
+    def test_ppm_to_png(self):
+        import zlib
+        d = Path(tempfile.mkdtemp())
+        (d / "a.ppm").write_bytes(b"P6\n# QEMU\n2 1\n255\n" + bytes([255, 0, 0, 0, 255, 0]))
+        vm.ppm_to_png(d / "a.ppm", d / "a.png")
+        png = (d / "a.png").read_bytes()
+        self.assertEqual(png[:8], b"\x89PNG\r\n\x1a\n")
+        self.assertEqual(struct.unpack(">II", png[16:24]), (2, 1))
+        idat = png[png.index(b"IDAT") + 4:png.index(b"IEND") - 8]
+        self.assertEqual(zlib.decompress(idat), b"\0" + bytes([255, 0, 0, 0, 255, 0]))
+
+
 class ServerTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

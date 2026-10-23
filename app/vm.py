@@ -104,7 +104,11 @@ def build_argv(qemu, cfg, img, run, ports, mode="desktop"):
                    " | base64 -d | gzip -dc | /bin/sh'\"",
                    "systemd.run_success_action=none", "systemd.run_failure_action=none"]
     else:
-        append += ["systemd.unit=multi-user.target"]
+        # Same first-boot masks as raspi-zero2w/start-pi.sh PI_FIRSTBOOT_WAIT: Plymouth holds the console
+        # (and getty waits on plymouth-quit-wait); the apt/man-db timers only slow the first boot down.
+        append += ["systemd.unit=multi-user.target", "systemd.mask=plymouth-start.service",
+                   "systemd.mask=plymouth-quit.service", "systemd.mask=plymouth-quit-wait.service",
+                   "systemd.mask=apt-daily.timer", "systemd.mask=apt-daily-upgrade.timer", "systemd.mask=man-db.timer"]
 
     disk = f"file={img / 'disk.qcow2'},format=qcow2,snapshot={'on' if cfg['snapshot'] else 'off'}"
     argv = [str(qemu), "-name", "Zero Lab", "-M", "raspi3ap", "-m", f"{cfg['ram']}M",
@@ -142,6 +146,31 @@ def build_argv(qemu, cfg, img, run, ports, mode="desktop"):
                  + (",display=gpu0" if gpu == "virgl" else "")]
     argv += ["-append", " ".join(append), "-no-reboot"]
     return argv
+
+
+def ppm_to_png(ppm, png):
+    """QEMU's screendump writes PPM everywhere (PNG needs libpng, which our builds leave out)."""
+    import struct
+    import zlib
+    data = Path(ppm).read_bytes()
+    parts, pos = [], 0
+    while len(parts) < 4:  # magic, width, height, maxval; skip whitespace and comments
+        while data[pos:pos + 1].isspace():
+            pos += 1
+        if data[pos:pos + 1] == b"#":
+            pos = data.index(b"\n", pos)
+            continue
+        end = pos
+        while not data[end:end + 1].isspace():
+            end += 1
+        parts.append(data[pos:end])
+        pos = end
+    w, h = int(parts[1]), int(parts[2])
+    pix = data[pos + 1:pos + 1 + w * h * 3]
+    raw = b"".join(b"\0" + pix[y * w * 3:(y + 1) * w * 3] for y in range(h))
+    chunk = lambda t, d: struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t + d))  # noqa: E731
+    Path(png).write_bytes(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+                          + chunk(b"IDAT", zlib.compress(raw, 6)) + chunk(b"IEND", b""))
 
 
 def img_partuuid(base):
