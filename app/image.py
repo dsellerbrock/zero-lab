@@ -53,12 +53,7 @@ users:
     sudo: "ALL=(ALL) NOPASSWD:ALL"
     ssh_authorized_keys: [{pubkey}]
 ssh_pwauth: true
-runcmd:
-  - [raspi-config, nonint, do_boot_behaviour, B4]
-  - [systemctl, enable, --now, ssh]
-  - [sh, -c, "printf 'virtio_mmio\\nvirtio_blk\\n' >> /etc/initramfs-tools/modules && update-initramfs -u"]
-  - [sh, -c, "echo ZL_PROVISIONED > /dev/ttyAMA1"]
-"""
+"""  # the rest of first-boot setup is guest/provision.sh, which reports on the serial console
 
 
 def sha256_file(path, progress=None):
@@ -101,19 +96,26 @@ def clone(src, dest):
         shutil.copyfile(src, dest)
 
 
-def bootfs_offset(img):
+def bootfs_extent(img):
+    """-> (offset, size) in bytes of partition 1 (the FAT boot partition)."""
     with open(img, "rb") as f:
         mbr = f.read(512)
     if mbr[510:512] != b"\x55\xaa":
         raise ValueError("That file is not a Raspberry Pi OS disk image. Choose an official .img or .img.xz file.")
-    return int.from_bytes(mbr[446 + 8:446 + 12], "little") * 512
+    return (int.from_bytes(mbr[446 + 8:446 + 12], "little") * 512,
+            int.from_bytes(mbr[446 + 12:446 + 16], "little") * 512)
+
+
+def bootfs_offset(img):
+    return bootfs_extent(img)[0]
 
 
 class BootFS:
     """Read/write files on the image's FAT boot partition: hdiutil on macOS, mtools on Linux."""
 
-    def __init__(self, img):
-        self.img, self.mount, self.dev = Path(img), None, None
+    def __init__(self, img, whole=False):
+        """whole=True: img is the FAT partition itself, not a disk image with an MBR."""
+        self.img, self.whole, self.mount, self.dev = Path(img), whole, None, None
 
     def __enter__(self):
         if platform.system() == "Darwin":
@@ -125,7 +127,7 @@ class BootFS:
             self.mount = next(Path(e["mount-point"]) for e in ents
                               if e.get("mount-point") and (Path(e["mount-point"]) / "config.txt").exists())
         else:
-            self.spec = f"{self.img}@@{bootfs_offset(self.img)}"
+            self.spec = f"{self.img}@@{0 if self.whole else bootfs_offset(self.img)}"
             # Pi OS FAT geometry trips mtools' sanity check ("not a multiple of sectors per track")
             self.env = {**os.environ, "MTOOLS_SKIP_CHECK": "1"}
         return self
@@ -200,3 +202,16 @@ def prepare(source, imgdir, user, password, qemu_img, progress):
     (imgdir / "state.json").write_text(json.dumps(state))
     progress("prepare", 1, 1)
     return state
+
+
+def extract_initramfs(imgdir, qemu_img):
+    """After the first boot: copy the guest-rebuilt initramfs (with virtio drivers) out of the overlay."""
+    off, size = bootfs_extent(imgdir / "base.img")
+    part = imgdir / "bootfs.raw"
+    try:
+        subprocess.run([str(qemu_img), "dd", "-f", "qcow2", "-O", "raw", f"if={imgdir / 'disk.qcow2'}", f"of={part}",
+                        "bs=512", f"skip={off // 512}", f"count={size // 512}"], check=True, capture_output=True)
+        with BootFS(part, whole=True) as fs:
+            fs.get("initramfs8", imgdir / "initramfs-virtio")
+    finally:
+        part.unlink(missing_ok=True)

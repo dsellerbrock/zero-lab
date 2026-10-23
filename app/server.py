@@ -149,6 +149,8 @@ class App:
     def on_vm_event(self, kind, **data):
         if kind == "marker":
             self.markers.setdefault(data["name"], threading.Event()).set()
+            if self.busy:
+                self.hub.emit("provision", stage="first-boot", done=0, total=1, step=data["name"])
         if kind == "status" and data["status"] == "stopped":
             if self.gpio:
                 self.gpio.stop()
@@ -218,20 +220,17 @@ class App:
             self.markers.clear()
             cfg = vmod.resolve({**self.cfg, "gpu": "soft", "snapshot": False, "network": True,
                                 "ram": max(512, int(self.cfg.get("ram", 512)))}, self.host)
-            self.vm.start(cfg, d, "provision")
-            if not self.markers.setdefault("ZL_PROVISIONED", threading.Event()).wait(3 * 3600):
-                raise TimeoutError("first boot did not finish")
-            g = guest.Guest(d / "ssh/id_ed25519", self.vm.ports["ssh"], user)
-            for _ in range(30):
-                try:
-                    g.sh("true")
-                    break
-                except (RuntimeError, subprocess.TimeoutExpired):
-                    time.sleep(2)
-            # Boot root over virtio-blk from now on if the rebuilt initramfs has the driver.
-            if g.sh("lsinitramfs /boot/firmware/initramfs8 | grep -c 'virtio_blk' || true").strip() not in (b"", b"0"):
-                (d / "initramfs-virtio").write_bytes(g.sh("cat /boot/firmware/initramfs8", timeout=120))
-            self.vm.stop(poweroff=g.poweroff, timeout=120)
+            self.vm.start(cfg, d, "provision", (APP / "guest/provision.sh").read_text(), {"zl-user": user})
+            try:
+                self.vm.proc.wait(3 * 3600)  # provision.sh powers the Pi off; the serial reader then quits QEMU
+            except subprocess.TimeoutExpired:
+                raise TimeoutError("the first boot did not finish within 3 hours") from None
+            seen = self.vm.seen
+            if "ZL_PROVISIONED" not in seen or "ZL_USER_READY" not in seen:
+                raise RuntimeError("the first boot stopped early (got: " + (", ".join(sorted(seen)) or "no progress")
+                                   + "). The serial console shows what the Pi printed.")
+            if "ZL_VIRTIO_INITRAMFS_OK" in seen:  # later boots use the fast virtio disk
+                image.extract_initramfs(d, qemu_img)
             st["provisioned"] = True
             (d / "state.json").write_text(json.dumps(st))
             progress("done", 1, 1)

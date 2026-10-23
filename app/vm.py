@@ -4,6 +4,7 @@ import gzip
 import json
 import os
 import platform
+import re
 import shutil
 import socket
 import subprocess
@@ -102,15 +103,17 @@ def build_argv(qemu, cfg, img, run, ports, mode="desktop"):
                "systemd.mask=NetworkManager-wait-online.service",
                # no EEPROM in QEMU, and fstrim over the SD path costs minutes on first boot
                "systemd.mask=rpi-eeprom-update.service", "systemd.mask=fstrim.service", "systemd.mask=fstrim.timer"]
+    # The setup script (desktop) or first-boot script (provision) travels in the DTB and runs as root.
+    append += ["systemd.unit=kernel-command-line.target",
+               "systemd.run=\"/bin/sh -c 'tr -d \\\\000 < /proc/device-tree/chosen/zl-setup"
+               " | base64 -d | gzip -dc | /bin/sh'\"",
+               "systemd.run_success_action=none", "systemd.run_failure_action=none"]
     if mode == "desktop":
-        append += ["systemd.show_status=false", "systemd.unit=kernel-command-line.target",
-                   "systemd.run=\"/bin/sh -c 'tr -d \\\\000 < /proc/device-tree/chosen/zl-setup"
-                   " | base64 -d | gzip -dc | /bin/sh'\"",
-                   "systemd.run_success_action=none", "systemd.run_failure_action=none"]
+        append += ["systemd.show_status=false"]
     else:
         # Same first-boot masks as raspi-zero2w/start-pi.sh PI_FIRSTBOOT_WAIT: Plymouth holds the console
         # (and getty waits on plymouth-quit-wait); the apt/man-db timers only slow the first boot down.
-        append += ["systemd.unit=multi-user.target", "systemd.mask=plymouth-start.service",
+        append += ["systemd.mask=plymouth-start.service",
                    "systemd.mask=plymouth-quit.service", "systemd.mask=plymouth-quit-wait.service",
                    "systemd.mask=apt-daily.timer", "systemd.mask=apt-daily-upgrade.timer", "systemd.mask=man-db.timer"]
 
@@ -241,11 +244,11 @@ class VM:
             if self.proc and self.proc.poll() is None:
                 raise RuntimeError("VM already running")
             qemu, _, qdir = qemu_paths()
-            self.cfg, self.ready = cfg, ready
+            self.cfg, self.ready, self.seen = cfg, ready, set()
             # Short socket dir: AF_UNIX paths are limited to ~104 bytes on macOS.
             self.run = Path(tempfile.mkdtemp(prefix="zl-"))
             self.ports = {"ssh": free_port(), "ws": free_port(), "vnc": free_port()}
-            props = dict(chosen or {})
+            props = {"zl-epoch": str(int(time.time())), **(chosen or {})}  # the Pi has no RTC
             if setup_script:
                 props["zl-setup"] = base64.b64encode(gzip.compress(setup_script.encode(), mtime=0)).decode()
             gpu = cfg["gpu"] if mode == "desktop" else "soft"
@@ -295,9 +298,9 @@ class VM:
                     self.qmp("quit")
                 except (OSError, RuntimeError):
                     pass
-            for mark in ("ZL_PROVISIONED", "ZL_SSH_READY"):
-                if mark in buf:
-                    buf = buf.replace(mark, "")
+            for mark in re.findall(r"ZL_[A-Z_]+", buf):
+                if mark not in self.seen:
+                    self.seen.add(mark)
                     self.emit("marker", name=mark)
 
     def serial_write(self, text):

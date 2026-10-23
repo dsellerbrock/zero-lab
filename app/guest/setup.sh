@@ -3,6 +3,8 @@
 # Trimmed from raspi-zero2w/desktop-input-setup.sh: input seat rule, compositor renderer, ready marker.
 exec >/dev/ttyAMA1 2>&1 || exec >/dev/console 2>&1
 echo ZL_SETUP_BEGIN
+# The Pi has no clock battery: take the host's time so TLS, apt and make work.
+date -u -s "@$(tr -d '\000' < /proc/device-tree/chosen/zl-epoch)" >/dev/null 2>&1 || true
 
 GPU_MODE=$(tr -d '\000' < /proc/device-tree/chosen/zl-gpu-mode 2>/dev/null || echo soft)
 USER_NAME=$(tr -d '\000' < /proc/device-tree/chosen/zl-user 2>/dev/null || echo pi)

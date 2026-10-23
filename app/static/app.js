@@ -92,6 +92,9 @@ function renderSetup() {
   $("setup-title").textContent = activeImage() ? "Set up another disk image" : "Set up your Pi";
 }
 const STAGES = ["download", "decompress", "prepare", "first-boot"];
+const FIRST_BOOT = { ZL_PROVISION_BEGIN: "starting", ZL_USER_READY: "user created", ZL_SSH_ENABLED: "network and SSH set up",
+  ZL_AUTOLOGIN: "desktop login set up", ZL_INITRAMFS_BEGIN: "preparing fast disk access (the longest part)",
+  ZL_VIRTIO_INITRAMFS_OK: "fast disk access ready", ZL_PROVISIONED: "finishing" };
 function showProgress(m) {
   const list = $("progress"); list.hidden = false;
   const idx = STAGES.indexOf(m.stage);
@@ -101,6 +104,7 @@ function showProgress(m) {
     if (i === idx && m.total > 1) li.insertAdjacentHTML("beforeend",
       `<span class="pct">${Math.round((100 * m.done) / m.total)}%</span><span class="bar"><i style="width:${(100 * m.done) / m.total}%"></i></span>`);
     else li.querySelector(".pct")?.remove();
+    if (li.dataset.stage === "first-boot" && m.step && FIRST_BOOT[m.step]) li.firstChild.textContent = `First boot: ${FIRST_BOOT[m.step]}`;
   });
   ["step-os", "step-user"].forEach((id) => $(id).classList.add("done"));
   $("img-add").disabled = true;
