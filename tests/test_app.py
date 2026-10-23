@@ -243,6 +243,14 @@ class ReadinessTest(unittest.TestCase):
         self.assertTrue(text)
 
 
+class SerialTest(unittest.TestCase):
+    def test_colour_codes_split_across_chunks(self):
+        out, carry = vm.clean_serial("", "Welcome to \x1b[1mDebian\x1b[0;3")
+        self.assertEqual((out, carry), ("Welcome to Debian", "\x1b[0;3"))
+        out, carry = vm.clean_serial(carry, "2m  OK  \x1b[0m]\r\n")
+        self.assertEqual((out, carry), ("  OK  ]\n", ""))
+
+
 class PngTest(unittest.TestCase):
     def test_ppm_to_png(self):
         import zlib

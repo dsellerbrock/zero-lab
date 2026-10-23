@@ -1,5 +1,6 @@
 """QEMU process: argument builder, QMP, serial console, lifecycle."""
 import base64
+import codecs
 import gzip
 import json
 import os
@@ -20,6 +21,18 @@ DEFAULTS = {"ram": 512, "cpus": 4, "accel": "auto", "gpu": "auto", "snapshot": F
             "network": True, "display": "app"}
 GPUS = ("venus", "virgl", "soft")
 READY_MARK = "ZL_DESKTOP_READY"
+ANSI = re.compile(r"\x1b\[[0-9;:?]*[A-Za-z]|\x1b[()][A-Za-z0-9]|\r")
+ANSI_TAIL = re.compile(r"\x1b(\[[0-9;:?]*|[()])?$")  # an escape sequence cut off at the end of a chunk
+
+
+def clean_serial(carry, text):
+    """-> (printable text, carry). Strips colour/cursor codes, holding back a sequence split across chunks."""
+    text = carry + text
+    m = ANSI_TAIL.search(text)
+    carry = text[m.start():] if m else ""
+    if m:
+        text = text[:m.start()]
+    return ANSI.sub("", text), carry
 
 
 def host():
@@ -278,7 +291,8 @@ class VM:
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         s.connect(str(self.run / "serial.sock"))
         self.serial = s
-        buf = ""
+        buf, carry = "", ""
+        decode = codecs.getincrementaldecoder("utf-8")("replace").decode  # characters split across reads
         while True:
             try:
                 data = s.recv(4096)
@@ -286,8 +300,9 @@ class VM:
                 break
             if not data:
                 break
-            text = data.decode("utf-8", "replace")
-            self.emit("serial", data=text)
+            text, carry = clean_serial(carry, decode(data))
+            if text:
+                self.emit("serial", data=text)
             buf = (buf + text)[-4096:]
             if self.ready in buf and self.status == "booting":
                 buf = ""
