@@ -1,4 +1,4 @@
-# Builds every Zero Lab download from this repository alone (inputs pinned in tools/pins.sh).
+# Builds every Zero Lab download (macOS dmg, Windows setup.exe, Linux AppImage) from this repository alone (inputs pinned in tools/pins.sh).
 # Run it by hand (Actions → Build installers → Run workflow) or push a tag v*. It only produces
 # artifacts; publishing a release stays a person's job (docs/BUILDING.md, "Releasing").
 name: Build installers
@@ -30,6 +30,13 @@ jobs:
         run: ZL_JOBS=4 kernel/build.sh
       - uses: actions/upload-artifact@v4
         with: { name: kernel, path: kernel/kernel8-virtio.img, if-no-files-found: error }
+      - name: The kernel's GPL source (a release asset of its own; 157 MB)
+        run: |
+          kernel/build.sh source
+          V=$(python3 -c 'import plistlib; print(plistlib.load(open("mac/Info.plist","rb"))["CFBundleShortVersionString"])')
+          tar -cf "Zero-Lab-$V-kernel-source.tar" kernel/src kernel/build.sh kernel/config
+      - uses: actions/upload-artifact@v4
+        with: { name: kernel-source, path: Zero-Lab-*-kernel-source.tar, if-no-files-found: error }
 
   macos:  # Zero-Lab-<v>-macOS-arm64.dmg (needs the macOS 26 SDK: an Apple Silicon macOS 26 runner)
     needs: [test, kernel]
@@ -42,21 +49,3 @@ jobs:
       - run: ZL_JOBS=3 mac/build-bundle.sh all
       - uses: actions/upload-artifact@v4
         with: { name: macos-dmg, path: build/mac/Zero-Lab-*-macOS-arm64.dmg, if-no-files-found: error }
-
-  linux-windows-zip:  # Zero-Lab-<v>-linux-windows.zip (WSL / build-from-source fallback) + the kernel's GPL source
-    needs: [test, kernel]
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with: { name: kernel, path: kernel }
-      - run: sudo apt-get update -qq && sudo apt-get install -y -qq librsvg2-bin imagemagick xz-utils zip ninja-build
-      - run: pipx install meson==1.12.0  # QEMU's archive-source.sh fetches its meson subprojects; Ubuntu's meson is too old
-      - run: tools/make-linux-windows-bundle.sh
-      - uses: actions/upload-artifact@v4
-        with:
-          name: linux-windows-zip
-          path: |
-            build/Zero-Lab-*-linux-windows.zip
-            build/Zero-Lab-*-kernel-source.tar
-          if-no-files-found: error
