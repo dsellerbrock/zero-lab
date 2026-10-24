@@ -9,6 +9,7 @@ import os
 import subprocess
 import tarfile
 import threading
+import time
 from pathlib import Path, PurePosixPath
 
 GUEST = Path(__file__).resolve().parent / "guest"
@@ -54,20 +55,43 @@ def pack(files):
     return out.getvalue()
 
 
+class NotReady(RuntimeError):
+    """The Pi's SSH isn't answering yet: it is still booting."""
+
+
 class Guest:
-    def __init__(self, key, port, user):
-        self.key, self.port, self.user = key, port, user
+    def __init__(self, key, port, user, slow=1):
+        # slow: how much longer everything takes under emulation (TCG, about 4x); scales every SSH timeout
+        self.key, self.port, self.user, self.slow = key, port, user, slow
         self.proc = None
+        self.ready = threading.Event()
+
+    def wait_ready(self, alive, limit=300):
+        """Poll `ssh true` with backoff until the Pi answers, for up to limit x slow seconds. -> answered"""
+        end, delay = time.monotonic() + limit * self.slow, 2
+        while alive() and time.monotonic() < end:
+            try:
+                self.sh("true", timeout=30)
+                self.ready.set()
+                return True
+            except (RuntimeError, subprocess.TimeoutExpired):
+                time.sleep(delay)
+                delay = min(delay * 2, 15)
+        return False
+
+    def need_ready(self):
+        if not self.ready.is_set():
+            raise NotReady("The Pi is still starting; try again in a moment.")
 
     def ssh_argv(self, command):
         return [openssh("ssh"), "-i", str(self.key), "-p", str(self.port),
                 # Loopback forward to our own VM, and the host key changes on every reprovision.
                 "-o", "StrictHostKeyChecking=no", "-o", f"UserKnownHostsFile={os.devnull}",
-                "-o", "BatchMode=yes", "-o", "ConnectTimeout=20", "-o", "LogLevel=ERROR",
+                "-o", "BatchMode=yes", "-o", f"ConnectTimeout={20 * self.slow}", "-o", "LogLevel=ERROR",
                 f"{self.user}@127.0.0.1", command]
 
     def sh(self, command, stdin=b"", timeout=60):
-        r = subprocess.run(self.ssh_argv(command), input=stdin, capture_output=True, timeout=timeout)
+        r = subprocess.run(self.ssh_argv(command), input=stdin, capture_output=True, timeout=timeout * self.slow)
         if r.returncode:
             raise RuntimeError(r.stderr.decode(errors="replace").strip() or f"exit {r.returncode}")
         return r.stdout

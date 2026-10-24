@@ -99,7 +99,7 @@ def main():
     def step(name, ok, **info):
         res["steps"][name] = {"ok": bool(ok), **info}
         print(f"[{'PASS' if ok else 'FAIL'}] {name} {json.dumps(info)}", flush=True)
-        if not ok and name in ("provision", "boot"):  # nothing after these can run; other failures carry on
+        if not ok and name in ("provision", "boot", "ssh-ready"):  # nothing after these can run; other failures carry on
             print(json.dumps(res))
             c.call("/api/stop", {})
             sys.exit(1)
@@ -122,6 +122,11 @@ def main():
     time.sleep(20)  # let the desktop settle before the screenshot
     shot = c.call("/api/screenshot", {})["path"]
     step("screenshot", png_colours(Path(shot)) > 16, path=shot)  # a black or blank screen has 1-2
+
+    # The Pi's SSH (Files, Build & run) can answer well after its desktop, minutes later under TCG
+    t = time.time()
+    ready = c.wait(lambda e: e["type"] == "guest" and e.get("ready"), 1500, 0)
+    step("ssh-ready", ready, seconds=round(time.time() - t))
 
     # Files sidebar: copy a file in, list it, copy it back out, compare
     blob = os.urandom(2 * 1024 * 1024)

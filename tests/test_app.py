@@ -10,6 +10,7 @@ import io
 import tempfile
 import threading
 import unittest
+import unittest.mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
@@ -142,6 +143,24 @@ class GuestTest(unittest.TestCase):
         self.assertEqual(guest.safe_name("./a\\b.py"), "a/b.py")
         for bad in ("../x", "/etc/passwd", "a/../../b", "", "."):
             self.assertIsNone(guest.safe_name(bad), bad)
+
+    def test_wait_ready(self):
+        g = guest.Guest(Path("k"), 2222, "pi", slow=4)
+        self.assertIn("ConnectTimeout=80", g.ssh_argv("true"))  # TCG: 4x the 20 s connect timeout
+        with self.assertRaises(guest.NotReady):
+            g.need_ready()
+        tries = []
+        def sh(cmd, stdin=b"", timeout=60):  # sshd answers on the third try
+            tries.append(cmd)
+            if len(tries) < 3:
+                raise RuntimeError("Connection refused")
+        g.sh = sh
+        with unittest.mock.patch.object(guest.time, "sleep"):
+            self.assertTrue(g.wait_ready(alive=lambda: True))
+        self.assertEqual(len(tries), 3)
+        g.need_ready()  # no longer raises
+        dead = guest.Guest(Path("k"), 2222, "pi")
+        self.assertFalse(dead.wait_ready(alive=lambda: False))  # the VM stopped: give up at once
 
     def test_pack(self):
         t = tarfile.open(fileobj=io.BytesIO(guest.pack([("p/main.py", b"print(1)")])))

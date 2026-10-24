@@ -33,6 +33,20 @@ export function filesPanel({ $, api, toast, esc, tilde, token }) {
     dlg.showModal(); $("confirm-cancel").focus();
   });
 
+  // ----- the Pi's SSH can answer minutes after its desktop (much later under emulation): keep asking -----
+  async function waitHome() {
+    while (running) {
+      try {
+        home = (await api("/api/fs/home")).path;
+        if (root.classList.contains("open") && cwd === null) go(home);
+        return;
+      } catch {
+        if (cwd === null) list.innerHTML = '<li class="fs-note">The Pi is still starting…</li>';
+        await new Promise((r) => setTimeout(r, 4000));
+      }
+    }
+  }
+
   // ----- listing -----
   async function go(path) {
     if (!running) return;
@@ -198,7 +212,7 @@ export function filesPanel({ $, api, toast, esc, tilde, token }) {
       root.classList.toggle("live", running);
       $("fs-off").hidden = running; $("fs-on").hidden = !running;
       if (!running) { cwd = null; entries = []; list.innerHTML = ""; return; }
-      api("/api/fs/home").then((r) => { home = r.path; if (root.classList.contains("open") && cwd === null) go(home); }).catch(() => {});
+      waitHome();
     },
   };
 }
