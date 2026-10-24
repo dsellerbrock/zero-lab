@@ -138,6 +138,7 @@ class App:
     def fs(self):
         if not self.guest or self.vm.status != "running":
             raise RuntimeError("Boot the Pi to browse its files")
+        self.guest.need_ready()
         return guest.Files(self.guest)
 
     def paths(self):
@@ -203,8 +204,14 @@ class App:
         self.markers.clear()
         self.vm.start(cfg, d, "desktop", (APP / "guest/setup.sh").read_text(), {"zl-user": st["user"]},
                       ready=vmod.READY_MARK if st.get("desktop", True) else "ZL_SETUP_DONE")
-        self.guest = guest.Guest(d / "ssh/id_ed25519", self.vm.ports["ssh"], st["user"])
+        self.guest = guest.Guest(d / "ssh/id_ed25519", self.vm.ports["ssh"], st["user"], 4 if cfg["accel"] == "tcg" else 1)
         threading.Thread(target=self.attach_gpio, daemon=True).start()
+        threading.Thread(target=self.wait_guest, args=(self.guest,), daemon=True).start()
+
+    def wait_guest(self, g):
+        """Files and Build & run need the Pi's SSH, which under TCG can answer minutes after the desktop."""
+        if g.wait_ready(alive=lambda: self.guest is g and self.vm.status in ("booting", "running")):
+            self.hub.emit("guest", ready=True)
 
     def i2c_state(self):
         """{"seg7": {...}, "lcd": {...}} from one qom-list-get."""
@@ -374,7 +381,7 @@ def make_handler(app, token, port):
                             f.list(q.get("path", ["/"])[0], q.get("hidden", ["0"])[0] == "1")
                         self.reply(200, out)
                     except (ValueError, RuntimeError, subprocess.TimeoutExpired) as e:
-                        self.reply(400, {"error": str(e)})
+                        self.reply(503 if isinstance(e, guest.NotReady) else 400, {"error": str(e)})
             elif path == "/api/i2c":
                 if self.guard(True):
                     try:
@@ -474,7 +481,7 @@ def make_handler(app, token, port):
                     return self.reply(409, {"error": "exists"})
                 except (ValueError, RuntimeError, OSError) as e:
                     self.close_connection = True
-                    return self.reply(400, {"error": str(e)})
+                    return self.reply(503 if isinstance(e, guest.NotReady) else 400, {"error": str(e)})
             if length > guest.MAX_UPLOAD:
                 return self.reply(413, {"error": "too large"})
             raw = self.rfile.read(length)
@@ -491,7 +498,8 @@ def make_handler(app, token, port):
                 self.reply(200, self.post(path, body) or {"ok": True})
             except (ValueError, KeyError, PermissionError, RuntimeError, FileNotFoundError,
                     subprocess.TimeoutExpired) as e:
-                self.reply(400 if not isinstance(e, PermissionError) else 409, {"error": str(e)})
+                self.reply(409 if isinstance(e, PermissionError) else 503 if isinstance(e, guest.NotReady) else 400,
+                           {"error": str(e)})
 
         def post(self, path, b):
             if path == "/api/config":
@@ -525,6 +533,7 @@ def make_handler(app, token, port):
             elif path in ("/api/project/run", "/api/project/stop", "/api/project/autostart"):
                 if not app.guest or app.vm.status != "running":
                     raise RuntimeError("boot the VM first")
+                app.guest.need_ready()
                 if path.endswith("/run"):
                     if not app.files:
                         raise ValueError("drop a project first")
